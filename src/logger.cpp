@@ -9,8 +9,9 @@ static const char* TAG = "logger";
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
-static constexpr uint8_t MAX_FILES  = 5;
-static constexpr char    INDEX_FILE[] = "/log_index";
+static constexpr uint8_t MAX_FILES      = 5;
+static constexpr size_t  ROW_BUF_SIZE   = 128;
+static constexpr char    INDEX_FILE[]   = "/log_index";
 
 // ---------------------------------------------------------------------------
 // Module state
@@ -120,7 +121,7 @@ void append_row(uint32_t               timestamp_ms,
         return;
     }
 
-    char row[128];
+    char row[ROW_BUF_SIZE];
     snprintf(row, sizeof(row),
              "%lu,%.1f,%.1f,%.1f,%u,%u,%.0f\r\n",
              static_cast<unsigned long>(timestamp_ms),
@@ -156,6 +157,7 @@ const char* get_latest_filename()
     if (_session_open || _last_completed_slot < 0) {
         return nullptr;
     }
+    // NOTE: single-threaded Arduino loop; no concurrent access is possible.
     static char buf[16];
     slot_path(buf, sizeof(buf), static_cast<uint8_t>(_last_completed_slot));
     return LittleFS.exists(buf) ? buf : nullptr;

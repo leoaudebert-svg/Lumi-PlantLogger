@@ -3,8 +3,10 @@
 #include <WiFi.h>
 #include <WebServer.h>
 #include <DNSServer.h>
+#include <LittleFS.h>
 #include <esp_log.h>
 #include <atomic>
+#include "logger.h"
 
 static const char* TAG = "webserver";
 
@@ -13,7 +15,7 @@ static const char* TAG = "webserver";
 // ---------------------------------------------------------------------------
 static constexpr char    AP_SSID[]            = "PlantLogger";
 static constexpr uint8_t DNS_PORT             = 53;
-static constexpr size_t  JSON_STATUS_BUF_SIZE = 256;
+static constexpr size_t  JSON_STATUS_BUF_SIZE = 320;
 
 // ---------------------------------------------------------------------------
 // Module-level state
@@ -108,7 +110,7 @@ static void handle_status() {
     snprintf(buf, JSON_STATUS_BUF_SIZE,
         "{\"temp_c\":%.1f,\"rh_pct\":%.1f,\"pressure_hpa\":%.1f,"
         "\"lux\":%u,\"soil_raw\":%u,\"soil_pct\":%.0f,"
-        "\"soil_calibrated\":%s,\"logging\":%s}",
+        "\"soil_calibrated\":%s,\"logging\":%s,\"download_available\":%s}",
         _last_env.temp_c,
         _last_env.rh_pct,
         _last_env.pressure_pa / 100.0f,
@@ -116,7 +118,8 @@ static void handle_status() {
         _last_soil.raw,
         _last_soil.pct,
         _last_soil.calibrated ? "true" : "false",
-        _logging ? "true" : "false");
+        _logging ? "true" : "false",
+        (!_logging && logger::get_latest_filename() != nullptr) ? "true" : "false");
     _server.send(200, "application/json", buf);
 }
 
@@ -128,9 +131,9 @@ static void handle_read_now() {
 static void handle_start() {
     String interval_str = _server.arg("interval");
     if (interval_str.length() > 0) {
-        long secs = interval_str.toInt();
-        if (secs > 0) {
-            _log_interval_ms = static_cast<uint32_t>(secs) * 1000UL;
+        long interval_secs = interval_str.toInt();
+        if (interval_secs > 0) {
+            _log_interval_ms = static_cast<uint32_t>(interval_secs) * 1000UL;
         }
     }
     _logging = true;
@@ -145,14 +148,32 @@ static void handle_stop() {
 }
 
 static void handle_download_csv() {
+    if (_logging) {
+        _server.send(409, "text/plain", "Stop logging before downloading");
+        return;
+    }
+    const char* path = logger::get_latest_filename();
+    if (path == nullptr) {
+        _server.send(404, "text/plain", "No log file available");
+        return;
+    }
+    File f = LittleFS.open(path, "r");
+    if (!f || f.isDirectory()) {
+        _server.send(500, "text/plain", "Failed to open log file");
+        return;
+    }
     _server.sendHeader("Content-Disposition", "attachment; filename=\"plantlogger.csv\"");
-    // Placeholder: real log data will come from LittleFS in a later phase.
-    _server.send(200, "text/csv", "timestamp,temp,rh,lux,soil\r\n");
+    _server.streamFile(f, "text/csv");
+    f.close();
 }
 
 static void handle_clear() {
-    // Placeholder: LittleFS integration pending.
-    ESP_LOGI(TAG, "/clear requested (placeholder — LittleFS integration pending)");
+    if (_logging) {
+        _server.send(409, "text/plain", "Stop logging before clearing");
+        return;
+    }
+    logger::clear_all();
+    ESP_LOGI(TAG, "/clear: all log files removed");
     _server.send(200, "text/plain", "OK");
 }
 

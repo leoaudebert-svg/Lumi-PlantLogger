@@ -75,6 +75,7 @@ void loop()
     if (logging_now && !_was_logging) {
         logger::start_new_session();
         // Trigger an immediate first reading at the start of the session.
+        // Back-date so the interval check fires immediately on the first tick.
         _last_log_ms = millis() - webserver::get_log_interval_ms();
         ESP_LOGI(TAG, "Logging started");
     } else if (!logging_now && _was_logging) {
