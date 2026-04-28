@@ -21,10 +21,11 @@ static constexpr size_t  JSON_STATUS_BUF_SIZE = 256;
 static WebServer _server(80);
 static DNSServer _dns;
 
-static env::EnvReading   _last_env  = {};
-static uint16_t          _last_lux  = 0;
-static soil::SoilReading _last_soil = {};
-static bool              _logging   = false;
+static env::EnvReading   _last_env        = {};
+static uint16_t          _last_lux        = 0;
+static soil::SoilReading _last_soil       = {};
+static bool              _logging         = false;
+static uint32_t          _log_interval_ms = 60000;
 static std::atomic<bool> _read_req  {false};
 
 // ---------------------------------------------------------------------------
@@ -50,10 +51,13 @@ static const char HTML_PAGE[] PROGMEM = R"rawliteral(<!DOCTYPE html>
 <p>Logging: <b id="log_state">--</b></p>
 <p id="msg" style="color:green"></p>
 <br>
+<label for="interval">Log interval (s):&nbsp;</label>
+<input id="interval" type="number" min="1" value="60" style="width:60px">
+<br><br>
 <button onclick="cmd('/read-now','POST','Reading...')">Read Now</button>
-<button onclick="cmd('/start','POST','Logging started')">Start Logging</button>
+<button onclick="start_logging()">Start Logging</button>
 <button onclick="cmd('/stop','POST','Logging stopped')">Stop Logging</button>
-<a href="/download.csv"><button type="button">Download CSV</button></a>
+<button id="dl_btn" onclick="download_csv()">Download CSV</button>
 <button onclick="cmd('/clear','POST','Log cleared')">Clear Log</button>
 <script>
 function cmd(url,method,msg){
@@ -61,6 +65,14 @@ function cmd(url,method,msg){
     document.getElementById('msg').textContent=msg;
     poll();
   });
+}
+function start_logging(){
+  var secs=parseInt(document.getElementById('interval').value)||60;
+  if(secs<1)secs=1;
+  cmd('/start?interval='+secs,'POST','Logging started');
+}
+function download_csv(){
+  window.location.href='/download.csv';
 }
 function poll(){
   fetch('/api/status').then(function(r){return r.json();}).then(function(d){
@@ -70,6 +82,8 @@ function poll(){
     document.getElementById('lux').textContent=d.lux+' lx';
     document.getElementById('soil').textContent=d.soil_calibrated?d.soil_pct.toFixed(0)+' %':'raw='+d.soil_raw;
     document.getElementById('log_state').textContent=d.logging?'ACTIVE':'STOPPED';
+    document.getElementById('interval').disabled=d.logging;
+    document.getElementById('dl_btn').disabled=d.logging||!d.download_available;
   });
 }
 poll();
@@ -112,8 +126,15 @@ static void handle_read_now() {
 }
 
 static void handle_start() {
+    String interval_str = _server.arg("interval");
+    if (interval_str.length() > 0) {
+        long secs = interval_str.toInt();
+        if (secs > 0) {
+            _log_interval_ms = static_cast<uint32_t>(secs) * 1000UL;
+        }
+    }
     _logging = true;
-    ESP_LOGI(TAG, "Logging started via web");
+    ESP_LOGI(TAG, "Logging started via web (interval: %u ms)", _log_interval_ms);
     _server.send(200, "text/plain", "OK");
 }
 
@@ -208,6 +229,10 @@ bool is_logging() {
 
 bool consume_read_request() {
     return _read_req.exchange(false);
+}
+
+uint32_t get_log_interval_ms() {
+    return _log_interval_ms;
 }
 
 } // namespace webserver

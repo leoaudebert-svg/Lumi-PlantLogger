@@ -46,4 +46,8 @@ namespace webserver {
     // auto-clears so main.cpp can detect the edge and perform one read.
     bool consume_read_request();
 
+    // Returns the logging interval set by the last /start request (ms).
+    // Default is 60 000 ms (60 s) until /start is called with an interval arg.
+    uint32_t get_log_interval_ms();
+
 } // namespace webserver
