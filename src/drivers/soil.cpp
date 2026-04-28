@@ -39,17 +39,30 @@ namespace soil {
         analogSetPinAttenuation(_pin, ADC_11db);
 
         // Load persisted calibration from NVS (read-only mode).
-        _prefs.begin(SOIL_NVS_NS, /*readOnly=*/true);
-        uint16_t stored_dry = _prefs.getUShort(SOIL_NVS_DRY, 0);
-        uint16_t stored_wet = _prefs.getUShort(SOIL_NVS_WET, 0);
-        _prefs.end();
-
-        if (stored_dry > stored_wet && stored_dry > 0) {
-            _cal = {stored_dry, stored_wet, true};
-            ESP_LOGI(TAG, "Calibration loaded from NVS — dry=%u wet=%u", stored_dry, stored_wet);
-        } else {
+        if (!_prefs.begin(SOIL_NVS_NS, /*readOnly=*/true)) {
+            ESP_LOGE(TAG, "NVS open failed — calibration unavailable");
             _cal = {0, 0, false};
-            ESP_LOGW(TAG, "No valid calibration in NVS — readings will lack pct");
+        } else {
+            uint16_t stored_dry = _prefs.getUShort(SOIL_NVS_DRY, 0);
+            uint16_t stored_wet = _prefs.getUShort(SOIL_NVS_WET, 0);
+            _prefs.end();
+
+            if (stored_dry > stored_wet &&
+                stored_dry > 0 &&
+                stored_dry <= SOIL_ADC_MAX &&
+                stored_wet <= SOIL_ADC_MAX) {
+                _cal = {stored_dry, stored_wet, true};
+                ESP_LOGI(TAG, "Calibration loaded from NVS — dry=%u wet=%u", stored_dry, stored_wet);
+            } else {
+                _cal = {0, 0, false};
+                if (stored_dry > 0 || stored_wet > 0) {
+                    ESP_LOGW(TAG,
+                             "NVS calibration out-of-range or invalid (dry=%u wet=%u) — ignoring",
+                             stored_dry, stored_wet);
+                } else {
+                    ESP_LOGW(TAG, "No valid calibration in NVS — readings will lack pct");
+                }
+            }
         }
 
         _initialized = true;
@@ -132,6 +145,12 @@ namespace soil {
     // -----------------------------------------------------------------------
 
     void set_calibration(uint16_t dry_raw, uint16_t wet_raw) {
+        if (dry_raw > SOIL_ADC_MAX || wet_raw > SOIL_ADC_MAX) {
+            ESP_LOGE(TAG,
+                     "set_calibration() rejected: values out of 12-bit range — dry=%u wet=%u (max %u)",
+                     dry_raw, wet_raw, SOIL_ADC_MAX);
+            return;
+        }
         if (dry_raw <= wet_raw) {
             ESP_LOGW(TAG,
                      "set_calibration() rejected: dry_raw (%u) must be > wet_raw (%u)",
@@ -139,7 +158,10 @@ namespace soil {
             return;
         }
 
-        _prefs.begin(SOIL_NVS_NS, /*readOnly=*/false);
+        if (!_prefs.begin(SOIL_NVS_NS, /*readOnly=*/false)) {
+            ESP_LOGE(TAG, "set_calibration(): NVS open failed — calibration not persisted");
+            return;
+        }
         _prefs.putUShort(SOIL_NVS_DRY, dry_raw);
         _prefs.putUShort(SOIL_NVS_WET, wet_raw);
         _prefs.end();
@@ -163,10 +185,13 @@ namespace soil {
     // -----------------------------------------------------------------------
 
     void clear_calibration() {
-        _prefs.begin(SOIL_NVS_NS, /*readOnly=*/false);
-        _prefs.remove(SOIL_NVS_DRY);
-        _prefs.remove(SOIL_NVS_WET);
-        _prefs.end();
+        if (_prefs.begin(SOIL_NVS_NS, /*readOnly=*/false)) {
+            _prefs.remove(SOIL_NVS_DRY);
+            _prefs.remove(SOIL_NVS_WET);
+            _prefs.end();
+        } else {
+            ESP_LOGE(TAG, "clear_calibration(): NVS open failed — keys may not be erased");
+        }
 
         _cal = {0, 0, false};
         ESP_LOGI(TAG, "Calibration cleared");
