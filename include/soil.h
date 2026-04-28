@@ -20,7 +20,8 @@
 // Hardware:
 //   DFRobot SEN0193 — analog output, higher voltage = drier soil
 //   Supply: 3.3 V; output ~1.0 V (wet) to ~2.8 V (dry)
-//   ADC: 12-bit, ADC_11db attenuation (0–~2.6 V input range)
+//   ADC: 12-bit, ADC_11db attenuation (usable linear range ~0.15–2.45 V;
+//        full-scale 3.3 V, but non-linearity increases above ~2.45 V)
 // ---------------------------------------------------------------------------
 
 namespace soil {
@@ -39,6 +40,8 @@ namespace soil {
 
     // Configure the ADC pin and load calibration from NVS.
     // Must be called once in setup(), after M5.begin().
+    // Note: analogReadResolution(12) is a global setting that affects all ADC
+    // reads in the application, not just this driver's pin.
     // Returns false if the pin is not a valid ADC-capable GPIO.
     bool begin(uint8_t pin);
 

@@ -97,7 +97,7 @@ namespace soil {
         // Insertion sort — O(n²) is fine for n ≤ 15.
         for (uint8_t i = 1; i < n; ++i) {
             uint16_t key = buf[i];
-            int8_t   j   = static_cast<int8_t>(i) - 1;
+            int      j   = static_cast<int>(i) - 1;
             while (j >= 0 && buf[j] > key) {
                 buf[j + 1] = buf[j];
                 --j;
