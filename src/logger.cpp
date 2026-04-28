@@ -9,9 +9,10 @@ static const char* TAG = "logger";
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
-static constexpr uint8_t MAX_FILES      = 5;
-static constexpr size_t  ROW_BUF_SIZE   = 128;
-static constexpr char    INDEX_FILE[]   = "/log_index";
+static constexpr uint8_t MAX_FILES        = 5;
+static constexpr size_t  ROW_BUF_SIZE     = 128;
+static constexpr uint8_t FLUSH_EVERY_ROWS = 30;
+static constexpr char    INDEX_FILE[]     = "/log_index";
 
 // ---------------------------------------------------------------------------
 // Module state
@@ -21,6 +22,7 @@ static bool    _session_open        = false;
 static int8_t  _current_slot        = -1;
 static int8_t  _last_completed_slot = -1;
 static uint8_t _next_slot           = 0;
+static uint8_t _unflushed_rows      = 0;  // rows written since last flush
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -101,8 +103,9 @@ bool start_new_session()
     _file.print("timestamp_ms,temp_c,rh_pct,pressure_hpa,lux,soil_raw,soil_pct\r\n");
     _file.flush();
 
-    _current_slot = static_cast<int8_t>(_next_slot);
-    _session_open = true;
+    _current_slot    = static_cast<int8_t>(_next_slot);
+    _session_open    = true;
+    _unflushed_rows  = 0;
 
     _next_slot = (_next_slot + 1) % MAX_FILES;
     save_next_slot();
@@ -133,13 +136,23 @@ void append_row(uint32_t               timestamp_ms,
              soil.pct);
 
     _file.print(row);
-    _file.flush();
+    ++_unflushed_rows;
+    if (_unflushed_rows >= FLUSH_EVERY_ROWS) {
+        _file.flush();
+        _unflushed_rows = 0;
+        ESP_LOGD(TAG, "Flushed %u rows to flash", FLUSH_EVERY_ROWS);
+    }
 }
 
 void stop_session()
 {
     if (!_session_open) {
         return;
+    }
+    // Flush any rows that haven't been written to flash yet.
+    if (_unflushed_rows > 0) {
+        _file.flush();
+        _unflushed_rows = 0;
     }
     _file.close();
     _last_completed_slot = _current_slot;
