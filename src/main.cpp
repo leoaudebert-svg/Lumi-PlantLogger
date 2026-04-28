@@ -2,6 +2,7 @@
 
 #include <M5Unified.h>
 #include "button.h"
+#include "dlight.h"
 
 static const char* TAG = "main";
 
@@ -16,6 +17,7 @@ void setup()
     M5.Display.drawString("PlantLogger", M5.Display.width() / 2, M5.Display.height() / 2);
 
     ESP_LOGI(TAG, "PlantLogger started.");
+    dlight::init();
 }
 
 void loop()
