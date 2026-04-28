@@ -4,8 +4,27 @@
 #include "button.h"
 #include "dlight.h"
 #include "env_driver.h"
+#include "soil.h"
+#include "webserver.h"
 
 static const char* TAG = "main";
+
+// ADC1 pins on the ESP32-S3 are GPIO 1–10.
+// GPIO 1 (SDA) and GPIO 2 (SCL) are used by the Grove I2C sensors, so
+// choose any of GPIO 3–10 that is physically accessible on your board.
+static constexpr uint8_t SOIL_ADC_PIN = 6;
+
+// Read all sensors and push the snapshot to the web dashboard.
+static void do_sensor_read()
+{
+    env::EnvReading   env_r  = env::is_ok()          ? env::read()      : env::EnvReading{};
+    uint16_t          lux    = dlight::is_available() ? dlight::read_lux() : 0;
+    soil::SoilReading soil_r = soil::is_ok()          ? soil::read()     : soil::SoilReading{};
+
+    webserver::set_reading(env_r, lux, soil_r);
+    ESP_LOGI(TAG, "Read: %.1f C  %.1f %%  %u lx  soil raw=%u",
+             env_r.temp_c, env_r.rh_pct, lux, soil_r.raw);
+}
 
 void setup()
 {
@@ -18,15 +37,35 @@ void setup()
     M5.Display.drawString("PlantLogger", M5.Display.width() / 2, M5.Display.height() / 2);
 
     env::begin();
+    dlight::init();
+    soil::begin(SOIL_ADC_PIN);
+
+    // Populate the dashboard with an initial reading before the AP is up.
+    do_sensor_read();
+
+    webserver::begin();
 
     ESP_LOGI(TAG, "PlantLogger started.");
-    dlight::init();
 }
 
 void loop()
 {
     M5.update();
     button::update();
+
+    webserver::handle();
+
+    // Web button or physical short-press → one immediate sensor read.
+    if (webserver::consume_read_request() || button::was_clicked()) {
+        do_sensor_read();
+    }
+
+    // Physical long-press → toggle logging on/off.
+    if (button::was_long_press()) {
+        bool next = !webserver::is_logging();
+        webserver::set_logging(next);
+        ESP_LOGI(TAG, "Logging %s via button", next ? "started" : "stopped");
+    }
 
     vTaskDelay(1);
 }
