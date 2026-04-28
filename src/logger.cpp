@@ -69,8 +69,15 @@ namespace logger {
 bool begin()
 {
     if (!LittleFS.begin(false)) {
-        ESP_LOGE(TAG, "LittleFS mount failed; filesystem was not auto-formatted to avoid erasing existing logs");
-        return false;
+        // First boot (or genuinely corrupt FS): format once and retry.
+        // On healthy subsequent boots the first begin() succeeds, so data
+        // is never erased by a transient mount failure.
+        ESP_LOGW(TAG, "LittleFS mount failed — formatting once and retrying (first boot or corrupt FS)");
+        if (!LittleFS.begin(true)) {
+            ESP_LOGE(TAG, "LittleFS format + mount failed");
+            return false;
+        }
+        ESP_LOGI(TAG, "LittleFS formatted and mounted");
     }
     load_next_slot();
 

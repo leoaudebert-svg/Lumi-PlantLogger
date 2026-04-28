@@ -15,7 +15,7 @@ static const char* TAG = "webserver";
 // ---------------------------------------------------------------------------
 static constexpr char    AP_SSID[]            = "PlantLogger";
 static constexpr uint8_t DNS_PORT             = 53;
-static constexpr size_t  JSON_STATUS_BUF_SIZE = 320;
+static constexpr size_t  JSON_STATUS_BUF_SIZE = 384;
 
 // ---------------------------------------------------------------------------
 // Module-level state
@@ -29,6 +29,11 @@ static soil::SoilReading _last_soil       = {};
 static bool              _logging         = false;
 static uint32_t          _log_interval_ms = 60000;
 static std::atomic<bool> _read_req  {false};
+
+// Pending calibration points — initialised from NVS in begin().
+// Both are needed before set_calibration() is called.
+static uint16_t _pending_dry_raw = 0;
+static uint16_t _pending_wet_raw = 0;
 
 // ---------------------------------------------------------------------------
 // HTML dashboard — served from flash via send_P()
@@ -61,6 +66,15 @@ static const char HTML_PAGE[] PROGMEM = R"rawliteral(<!DOCTYPE html>
 <button onclick="cmd('/stop','POST','Logging stopped')">Stop Logging</button>
 <button id="dl_btn" onclick="download_csv()">Download CSV</button>
 <button onclick="cmd('/clear','POST','Log cleared')">Clear Log</button>
+<hr>
+<h2>Soil Calibration</h2>
+<p id="cal_info" style="color:gray">Loading...</p>
+<p><b>Step 1 — Dry:</b> Hold the sensor in open air, then click &rarr;
+  <button onclick="calibrate('dry')">Capture Dry</button></p>
+<p><b>Step 2 — Wet:</b> Submerge the sensor tip in water, then click &rarr;
+  <button onclick="calibrate('wet')">Capture Wet</button></p>
+<button onclick="cmd('/calibrate-clear','POST','Calibration cleared')">Clear Calibration</button>
+<p id="cal_msg" style="color:blue"></p>
 <script>
 function cmd(url,method,msg){
   fetch(url,{method:method}).then(function(){
@@ -76,6 +90,12 @@ function start_logging(){
 function download_csv(){
   window.location.href='/download.csv';
 }
+function calibrate(point){
+  fetch('/calibrate-'+point,{method:'POST'}).then(function(r){return r.text();}).then(function(t){
+    document.getElementById('cal_msg').textContent=t;
+    poll();
+  });
+}
 function poll(){
   fetch('/api/status').then(function(r){return r.json();}).then(function(d){
     document.getElementById('temp').textContent=d.temp_c.toFixed(1)+' \u00b0C';
@@ -86,6 +106,12 @@ function poll(){
     document.getElementById('log_state').textContent=d.logging?'ACTIVE':'STOPPED';
     document.getElementById('interval').disabled=d.logging;
     document.getElementById('dl_btn').disabled=d.logging||!d.download_available;
+    var dry=d.cal_dry,wet=d.cal_wet,s;
+    if(dry>0&&wet>0){s='dry='+dry+' | wet='+wet;}
+    else if(dry>0){s='dry='+dry+' | wet=?';}
+    else if(wet>0){s='dry=? | wet='+wet;}
+    else{s='Not calibrated';}
+    document.getElementById('cal_info').textContent='Stored calibration: '+s;
   });
 }
 poll();
@@ -108,7 +134,8 @@ static void handle_status() {
     snprintf(buf, JSON_STATUS_BUF_SIZE,
         "{\"temp_c\":%.1f,\"rh_pct\":%.1f,\"pressure_hpa\":%.1f,"
         "\"lux\":%u,\"soil_raw\":%u,\"soil_pct\":%.0f,"
-        "\"soil_calibrated\":%s,\"logging\":%s,\"download_available\":%s}",
+        "\"soil_calibrated\":%s,\"logging\":%s,\"download_available\":%s,"
+        "\"cal_dry\":%u,\"cal_wet\":%u}",
         _last_env.temp_c,
         _last_env.rh_pct,
         _last_env.pressure_pa / 100.0f,
@@ -117,7 +144,9 @@ static void handle_status() {
         _last_soil.pct,
         _last_soil.calibrated ? "true" : "false",
         _logging ? "true" : "false",
-        (!_logging && logger::get_latest_filename() != nullptr) ? "true" : "false");
+        (!_logging && logger::get_latest_filename() != nullptr) ? "true" : "false",
+        _pending_dry_raw,
+        _pending_wet_raw);
     _server.send(200, "application/json", buf);
 }
 
@@ -179,6 +208,56 @@ static void handle_clear() {
     _server.send(200, "text/plain", "OK");
 }
 
+static void handle_calibrate_dry() {
+    if (!soil::is_ok()) {
+        _server.send(503, "text/plain", "Soil sensor not initialised");
+        return;
+    }
+    uint16_t raw = soil::read_median();
+    _pending_dry_raw = raw;
+    ESP_LOGI(TAG, "Dry calibration point captured: raw=%u", raw);
+    if (_pending_wet_raw > 0 && raw > _pending_wet_raw) {
+        soil::set_calibration(raw, _pending_wet_raw);
+        char msg[64];
+        snprintf(msg, sizeof(msg), "Dry point saved (raw=%u). Calibration complete!", raw);
+        _server.send(200, "text/plain", msg);
+    } else {
+        char msg[80];
+        snprintf(msg, sizeof(msg),
+                 "Dry point recorded (raw=%u). Now submerge in water and click Capture Wet.", raw);
+        _server.send(200, "text/plain", msg);
+    }
+}
+
+static void handle_calibrate_wet() {
+    if (!soil::is_ok()) {
+        _server.send(503, "text/plain", "Soil sensor not initialised");
+        return;
+    }
+    uint16_t raw = soil::read_median();
+    _pending_wet_raw = raw;
+    ESP_LOGI(TAG, "Wet calibration point captured: raw=%u", raw);
+    if (_pending_dry_raw > 0 && _pending_dry_raw > raw) {
+        soil::set_calibration(_pending_dry_raw, raw);
+        char msg[64];
+        snprintf(msg, sizeof(msg), "Wet point saved (raw=%u). Calibration complete!", raw);
+        _server.send(200, "text/plain", msg);
+    } else {
+        char msg[80];
+        snprintf(msg, sizeof(msg),
+                 "Wet point recorded (raw=%u). Now hold in open air and click Capture Dry.", raw);
+        _server.send(200, "text/plain", msg);
+    }
+}
+
+static void handle_calibrate_clear() {
+    soil::clear_calibration();
+    _pending_dry_raw = 0;
+    _pending_wet_raw = 0;
+    ESP_LOGI(TAG, "Soil calibration cleared via web");
+    _server.send(200, "text/plain", "Calibration cleared");
+}
+
 // Redirects OS captive-portal probes to the dashboard so the phone
 // automatically presents a "Sign in to network" popup on connect.
 static void handle_captive_redirect() {
@@ -201,6 +280,16 @@ void begin() {
     WiFi.softAP(AP_SSID);
     ESP_LOGI(TAG, "AP started — SSID: %s  IP: 192.168.4.1", AP_SSID);
 
+    // Seed pending calibration state from whatever is already in NVS so that
+    // single-point updates (e.g. recapture only the wet point) work correctly.
+    {
+        soil::CalibrationData cal = soil::get_calibration();
+        if (cal.valid) {
+            _pending_dry_raw = cal.dry_raw;
+            _pending_wet_raw = cal.wet_raw;
+        }
+    }
+
     // Wildcard DNS: every hostname resolves to the AP IP so the phone's
     // captive-portal detector fires regardless of which domain it probes.
     _dns.setErrorReplyCode(DNSReplyCode::NoError);
@@ -208,13 +297,16 @@ void begin() {
     ESP_LOGI(TAG, "DNS server started (wildcard -> 192.168.4.1)");
 
     // Main routes
-    _server.on("/",             HTTP_GET,  handle_root);
-    _server.on("/api/status",   HTTP_GET,  handle_status);
-    _server.on("/read-now",     HTTP_POST, handle_read_now);
-    _server.on("/start",        HTTP_POST, handle_start);
-    _server.on("/stop",         HTTP_POST, handle_stop);
-    _server.on("/download.csv", HTTP_GET,  handle_download_csv);
-    _server.on("/clear",        HTTP_POST, handle_clear);
+    _server.on("/",                  HTTP_GET,  handle_root);
+    _server.on("/api/status",        HTTP_GET,  handle_status);
+    _server.on("/read-now",          HTTP_POST, handle_read_now);
+    _server.on("/start",             HTTP_POST, handle_start);
+    _server.on("/stop",              HTTP_POST, handle_stop);
+    _server.on("/download.csv",      HTTP_GET,  handle_download_csv);
+    _server.on("/clear",             HTTP_POST, handle_clear);
+    _server.on("/calibrate-dry",     HTTP_POST, handle_calibrate_dry);
+    _server.on("/calibrate-wet",     HTTP_POST, handle_calibrate_wet);
+    _server.on("/calibrate-clear",   HTTP_POST, handle_calibrate_clear);
 
     // Captive portal probe URLs for the main operating systems
     _server.on("/hotspot-detect.html",          HTTP_GET, handle_captive_redirect); // iOS / macOS
