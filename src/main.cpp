@@ -18,6 +18,7 @@ static constexpr uint8_t SOIL_ADC_PIN = 6;
 // Logging transition tracking
 static bool     _was_logging  = false;
 static uint32_t _last_log_ms  = 0;
+static bool     _fs_ok        = false;  // set from logger::begin(); gates session operations
 
 // Read all sensors, push the snapshot to the web dashboard, and (if logging
 // is active) append the row to the current session file.
@@ -50,7 +51,10 @@ void setup()
     env::begin();
     dlight::init();
     soil::begin(SOIL_ADC_PIN);
-    logger::begin();
+    _fs_ok = logger::begin();
+    if (!_fs_ok) {
+        ESP_LOGE(TAG, "LittleFS unavailable — logging is disabled for this session");
+    }
 
     // Populate the dashboard with an initial reading before the AP is up.
     do_sensor_read();
@@ -73,11 +77,16 @@ void loop()
     // with the flag, regardless of whether it was set by the web UI or the
     // physical button.
     if (logging_now && !_was_logging) {
-        logger::start_new_session();
-        // Trigger an immediate first reading at the start of the session.
-        // Back-date so the interval check fires immediately on the first tick.
-        _last_log_ms = millis() - webserver::get_log_interval_ms();
-        ESP_LOGI(TAG, "Logging started");
+        if (!_fs_ok) {
+            ESP_LOGW(TAG, "Logging requested but LittleFS is unavailable — ignoring");
+            webserver::set_logging(false);
+        } else {
+            logger::start_new_session();
+            // Trigger an immediate first reading at the start of the session.
+            // Back-date so the interval check fires immediately on the first tick.
+            _last_log_ms = millis() - webserver::get_log_interval_ms();
+            ESP_LOGI(TAG, "Logging started");
+        }
     } else if (!logging_now && _was_logging) {
         logger::stop_session();
         ESP_LOGI(TAG, "Logging stopped");

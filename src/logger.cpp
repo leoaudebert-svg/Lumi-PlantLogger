@@ -73,6 +73,18 @@ bool begin()
         return false;
     }
     load_next_slot();
+
+    // Infer the last completed slot from the persisted next-slot pointer.
+    // The slot written most recently is (_next_slot - 1) in round-robin order.
+    // If that file exists, make it available for download immediately after boot.
+    uint8_t candidate = (_next_slot + MAX_FILES - 1) % MAX_FILES;
+    char path[16];
+    slot_path(path, sizeof(path), candidate);
+    if (LittleFS.exists(path)) {
+        _last_completed_slot = static_cast<int8_t>(candidate);
+        ESP_LOGI(TAG, "Inferred last completed slot: %d (%s)", _last_completed_slot, path);
+    }
+
     ESP_LOGI(TAG, "LittleFS ready — next slot: %u", _next_slot);
     return true;
 }

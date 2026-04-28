@@ -104,8 +104,6 @@ static void handle_root() {
 }
 
 static void handle_status() {
-    // Buffer sized for the fixed-format JSON; largest realistic values fit well
-    // within 256 bytes (verified by inspection of the format string).
     char buf[JSON_STATUS_BUF_SIZE];
     snprintf(buf, JSON_STATUS_BUF_SIZE,
         "{\"temp_c\":%.1f,\"rh_pct\":%.1f,\"pressure_hpa\":%.1f,"
@@ -129,6 +127,10 @@ static void handle_read_now() {
 }
 
 static void handle_start() {
+    if (_logging) {
+        _server.send(409, "text/plain", "Already logging — stop the current session first");
+        return;
+    }
     String interval_str = _server.arg("interval");
     if (interval_str.length() > 0) {
         long interval_secs = interval_str.toInt();
