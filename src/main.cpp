@@ -2,6 +2,7 @@
 
 #include <M5Unified.h>
 #include "button.h"
+#include "dlight.h"
 #include "env_driver.h"
 
 static const char* TAG = "main";
@@ -19,6 +20,7 @@ void setup()
     env::begin();
 
     ESP_LOGI(TAG, "PlantLogger started.");
+    dlight::init();
 }
 
 void loop()
