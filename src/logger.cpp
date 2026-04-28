@@ -66,8 +66,8 @@ namespace logger {
 
 bool begin()
 {
-    if (!LittleFS.begin(true)) {
-        ESP_LOGE(TAG, "LittleFS mount failed");
+    if (!LittleFS.begin(false)) {
+        ESP_LOGE(TAG, "LittleFS mount failed; filesystem was not auto-formatted to avoid erasing existing logs");
         return false;
     }
     load_next_slot();
