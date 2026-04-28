@@ -3,6 +3,7 @@
 #include <M5Unified.h>
 #include "button.h"
 #include "dlight.h"
+#include "env_driver.h"
 
 static const char* TAG = "main";
 
@@ -15,6 +16,8 @@ void setup()
     M5.Display.setTextColor(TFT_GREEN, TFT_BLACK);
     M5.Display.setTextDatum(middle_center);
     M5.Display.drawString("PlantLogger", M5.Display.width() / 2, M5.Display.height() / 2);
+
+    env::begin();
 
     ESP_LOGI(TAG, "PlantLogger started.");
     dlight::init();
