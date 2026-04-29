@@ -23,7 +23,7 @@ namespace env {
 bool begin() {
     // Wire is expected to be ready — M5.begin() initializes it before setup() continues.
 
-    bool sht_ok = _sht30.begin(&Wire, SHT30_ADDR);
+    bool sht_ok = _sht30.init(SHT30_ADDR, &Wire);
     if (!sht_ok) {
         ESP_LOGE(TAG, "SHT30 init failed (addr 0x%02X) — check wiring", SHT30_ADDR);
         _initialized  = false;
@@ -32,7 +32,7 @@ bool begin() {
     }
     ESP_LOGI(TAG, "SHT30 initialized (addr 0x%02X)", SHT30_ADDR);
 
-    uint8_t qmp_ret = _qmp6988.init(&Wire, QMP6988_ADDR);
+    uint8_t qmp_ret = _qmp6988.init(QMP6988_ADDR, &Wire);
     _qmp_available = (qmp_ret == 0);
     if (!_qmp_available) {
         ESP_LOGW(TAG, "QMP6988 init failed (addr 0x%02X, ret=%d) — pressure unavailable",
