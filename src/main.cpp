@@ -5,13 +5,13 @@
 #include "dlight.h"
 #include "env_driver.h"
 #include "soil.h"
-#include "webserver.h"
+#include "plant_webserver.h"
 #include "logger.h"
 
 static const char* TAG = "main";
 
 // ADC1 pins on the ESP32-S3 are GPIO 1–10.
-// GPIO 1 (SDA) and GPIO 2 (SCL) are used by the Grove I2C sensors, so
+// GPIO 2 (SDA) and GPIO 1 (SCL) are used by the Grove I2C sensors, so
 // choose any of GPIO 3–10 that is physically accessible on your board.
 static constexpr uint8_t SOIL_ADC_PIN = 6;
 
@@ -24,6 +24,20 @@ static bool     _fs_ok        = false;  // set from logger::begin(); gates sessi
 static env::EnvReading   _last_env_r  = {};
 static uint16_t          _last_lux    = 0;
 static soil::SoilReading _last_soil_r = {};
+
+static void show_boot_status(const char* msg)
+{
+    M5.Display.fillScreen(TFT_BLACK);
+    M5.Display.setTextDatum(top_left);
+    M5.Display.setTextSize(1);
+    M5.Display.setTextColor(TFT_CYAN, TFT_BLACK);
+    M5.Display.setCursor(0, 2);
+    M5.Display.print("PlantLogger");
+    M5.Display.setTextColor(TFT_WHITE, TFT_BLACK);
+    M5.Display.setCursor(0, 18);
+    M5.Display.print(msg);
+    Serial.println(msg);
+}
 
 // Render the latest sensor snapshot and logging state onto the 128x128 display.
 // Each line is positioned with an explicit setCursor() so the layout is stable.
@@ -122,6 +136,11 @@ static void do_sensor_read()
 
 void setup()
 {
+    Serial.begin(115200);
+    delay(200);
+    Serial.println();
+    Serial.println("PlantLogger boot");
+
     auto cfg = M5.config();
     M5.begin(cfg);
 
@@ -130,9 +149,16 @@ void setup()
     M5.Display.setTextDatum(middle_center);
     M5.Display.drawString("PlantLogger", M5.Display.width() / 2, M5.Display.height() / 2);
 
+    show_boot_status("Starting WiFi AP...");
+    webserver::begin();
+
+    show_boot_status("Starting ENV...");
     env::begin();
+    show_boot_status("Starting light...");
     dlight::init();
+    show_boot_status("Starting soil...");
     soil::begin(SOIL_ADC_PIN);
+    show_boot_status("Mounting storage...");
     _fs_ok = logger::begin();
     if (!_fs_ok) {
         ESP_LOGE(TAG, "LittleFS unavailable — logging is disabled for this session");
@@ -140,11 +166,11 @@ void setup()
 
     // Initial sensor read: populates the dashboard and replaces the splash screen
     // with live readings before the Wi-Fi AP comes up.
+    show_boot_status("Reading sensors...");
     do_sensor_read();
 
-    webserver::begin();
-
     ESP_LOGI(TAG, "PlantLogger started.");
+    Serial.println("PlantLogger started");
 }
 
 void loop()

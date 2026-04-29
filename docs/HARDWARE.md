@@ -15,7 +15,7 @@ electrical connections to the M5Stack AtomS3R, and relevant specifications.
 | Display | 128 × 128 px IPS LCD |
 | Wireless | Wi-Fi 802.11 b/g/n (2.4 GHz) |
 | USB | USB-C, USB CDC on boot |
-| GPIO connector | HY2.0-4P (Grove) port — SDA=GPIO1, SCL=GPIO2 |
+| GPIO connector | HY2.0-4P (Grove) port — SDA=GPIO2, SCL=GPIO1 |
 | Button | Built-in front-face button (M5.BtnA) |
 
 The I2C Grove port is shared by all three I2C sensors.  The bus runs at
@@ -28,9 +28,9 @@ The I2C Grove port is shared by all three I2C sensors.  The bus runs at
 
 | Sensor | Module | I2C Address | Bus Pins |
 |---|---|---|---|
-| SHT30 (temp / RH) | M5Stack ENV III | 0x44 | GPIO1 (SDA), GPIO2 (SCL) |
-| QMP6988 (pressure) | M5Stack ENV III | 0x70 | GPIO1 (SDA), GPIO2 (SCL) |
-| BH1750 (lux) | M5Stack DLight | 0x23 | GPIO1 (SDA), GPIO2 (SCL) |
+| SHT30 (temp / RH) | M5Stack ENV III | 0x44 | GPIO2 (SDA), GPIO1 (SCL) |
+| QMP6988 (pressure) | M5Stack ENV III | 0x70 | GPIO2 (SDA), GPIO1 (SCL) |
+| BH1750 (lux) | M5Stack DLight | 0x23 | GPIO2 (SDA), GPIO1 (SCL) |
 
 No address conflicts exist.  All three sensors can coexist on the same Grove
 port simultaneously.
@@ -60,7 +60,7 @@ The ESP32-S3 ADC1 channels are on **GPIO 1–10**.  ADC2 shares pins with the
 Wi-Fi radio and is unreliable when Wi-Fi is active; `soil::begin()` rejects
 any pin outside GPIO 1–10.
 
-GPIO 1 (SDA) and GPIO 2 (SCL) are already used by the I2C bus.  Choose any
+GPIO 2 (SDA) and GPIO 1 (SCL) are already used by the I2C bus.  Choose any
 remaining pin from GPIO 3–10 that is physically accessible on your board.
 The default is **GPIO 6**.
 

@@ -7,8 +7,8 @@
 // Hardware constants — AtomS3R Grove / HY2.0-4P port
 // Promote to a shared config.h once the full sensor stack is wired.
 // ---------------------------------------------------------------------------
-static constexpr uint8_t  DLIGHT_SDA_PIN  = 1;
-static constexpr uint8_t  DLIGHT_SCL_PIN  = 2;
+static constexpr uint8_t  DLIGHT_SDA_PIN  = 2;
+static constexpr uint8_t  DLIGHT_SCL_PIN  = 1;
 static constexpr uint32_t DLIGHT_I2C_FREQ = 400000UL;
 static constexpr uint8_t  DLIGHT_I2C_ADDR = 0x23;
 

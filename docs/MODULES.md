@@ -69,8 +69,8 @@ Driver for the M5Stack DLight ambient light sensor (BH1750).
 
 | Constant | Value | Description |
 |---|---|---|
-| `DLIGHT_SDA_PIN` | 1 | Grove SDA pin |
-| `DLIGHT_SCL_PIN` | 2 | Grove SCL pin |
+| `DLIGHT_SDA_PIN` | 2 | Grove SDA pin |
+| `DLIGHT_SCL_PIN` | 1 | Grove SCL pin |
 | `DLIGHT_I2C_FREQ` | 400000 Hz | I2C bus speed |
 | `DLIGHT_I2C_ADDR` | 0x23 | BH1750 I2C address |
 

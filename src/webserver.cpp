@@ -1,4 +1,4 @@
-#include "webserver.h"
+#include "plant_webserver.h"
 
 #include <WiFi.h>
 #include <WebServer.h>
@@ -276,9 +276,17 @@ void begin() {
     IPAddress subnet(255, 255, 255, 0);
 
     WiFi.mode(WIFI_AP);
+    WiFi.setSleep(false);
     WiFi.softAPConfig(ap_ip, ap_ip, subnet);
-    WiFi.softAP(AP_SSID);
-    ESP_LOGI(TAG, "AP started — SSID: %s  IP: 192.168.4.1", AP_SSID);
+    bool ap_ok = WiFi.softAP(AP_SSID, nullptr, 1, false, 4);
+    Serial.printf("WiFi AP %s: SSID=%s IP=%s\n",
+                  ap_ok ? "started" : "FAILED",
+                  AP_SSID,
+                  WiFi.softAPIP().toString().c_str());
+    ESP_LOGI(TAG, "AP %s - SSID: %s  IP: %s",
+             ap_ok ? "started" : "FAILED",
+             AP_SSID,
+             WiFi.softAPIP().toString().c_str());
 
     // Seed pending calibration state from whatever is already in NVS so that
     // single-point updates (e.g. recapture only the wet point) work correctly.

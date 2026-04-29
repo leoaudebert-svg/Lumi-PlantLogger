@@ -8,6 +8,9 @@ static const char* TAG = "env";
 
 static constexpr uint8_t SHT30_ADDR   = 0x44;
 static constexpr uint8_t QMP6988_ADDR = 0x70;
+static constexpr uint8_t I2C_SDA_PIN  = 2;
+static constexpr uint8_t I2C_SCL_PIN  = 1;
+static constexpr uint32_t I2C_FREQ_HZ  = 400000UL;
 
 static SHT3X   _sht30;
 static QMP6988 _qmp6988;
@@ -21,6 +24,8 @@ static bool _qmp_available = false;
 namespace env {
 
 bool begin() {
+    Wire.begin(I2C_SDA_PIN, I2C_SCL_PIN, I2C_FREQ_HZ);
+
     // Wire is expected to be ready — M5.begin() initializes it before setup() continues.
 
     bool sht_ok = _sht30.init(SHT30_ADDR, &Wire);
@@ -57,12 +62,13 @@ EnvReading read() {
         return result;
     }
 
-    result.sht_ok = _sht30.get();
+    byte sht_status = _sht30.get();
+    result.sht_ok = (sht_status == 0);
     if (result.sht_ok) {
         result.temp_c = _sht30.cTemp;
         result.rh_pct = _sht30.humidity;
     } else {
-        ESP_LOGE(TAG, "SHT30 read failed");
+        ESP_LOGE(TAG, "SHT30 read failed (status=%u)", sht_status);
     }
 
     if (_qmp_available) {
