@@ -1,6 +1,7 @@
 #pragma once
 #include "env_driver.h"
 #include "soil.h"
+#include <stddef.h>
 #include <stdint.h>
 
 // ---------------------------------------------------------------------------
@@ -24,6 +25,16 @@
 // ---------------------------------------------------------------------------
 
 namespace logger {
+
+    static constexpr uint8_t MAX_LOG_FILES = 5;
+    static constexpr size_t  LOG_PATH_LEN  = 16;
+
+    struct LogFileInfo {
+        uint8_t slot;
+        char    path[LOG_PATH_LEN];
+        size_t  size_bytes;
+        bool    is_latest;
+    };
 
     // Mount LittleFS and restore the write-slot counter from flash.
     // Returns false if the filesystem cannot be mounted.
@@ -52,6 +63,14 @@ namespace logger {
     // recently completed session file, or nullptr if none is available
     // (no session has finished yet, or the file was cleared).
     const char* get_latest_filename();
+
+    // Returns a pointer to a static buffer holding the path of a completed
+    // log slot, or nullptr if the slot is invalid, missing, or currently open.
+    const char* get_filename_for_slot(uint8_t slot);
+
+    // Fill out with metadata for completed log files. Returns the count
+    // written, ordered newest-first when the latest slot is known.
+    uint8_t list_files(LogFileInfo* out, uint8_t max_items);
 
     // Delete all /log_*.csv files and reset the slot counter.
     // No-op (with a warning) if a session is currently open.

@@ -6,7 +6,9 @@
 #include <LittleFS.h>
 #include <esp_log.h>
 #include <atomic>
+#include <ctype.h>
 #include "logger.h"
+#include "dashboard_page.h"
 
 static const char* TAG = "webserver";
 
@@ -28,98 +30,41 @@ static uint16_t          _last_lux        = 0;
 static soil::SoilReading _last_soil       = {};
 static bool              _logging         = false;
 static uint32_t          _log_interval_ms = 60000;
-static std::atomic<bool> _read_req  {false};
+static std::atomic<bool> _read_req {false};
 
-// Pending calibration points — initialised from NVS in begin().
+// Pending calibration points, initialised from NVS in begin().
 // Both are needed before set_calibration() is called.
 static uint16_t _pending_dry_raw = 0;
 static uint16_t _pending_wet_raw = 0;
 
 // ---------------------------------------------------------------------------
-// HTML dashboard — served from flash via send_P()
+// Helpers
 // ---------------------------------------------------------------------------
-static const char HTML_PAGE[] PROGMEM = R"rawliteral(<!DOCTYPE html>
-<html>
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>PlantLogger</title>
-</head>
-<body>
-<h1>PlantLogger</h1>
-<h2>Sensor Readings</h2>
-<table border="1" cellpadding="6">
-<tr><td>Temperature</td><td id="temp">--</td></tr>
-<tr><td>Humidity</td><td id="rh">--</td></tr>
-<tr><td>Pressure</td><td id="pres">--</td></tr>
-<tr><td>Light</td><td id="lux">--</td></tr>
-<tr><td>Soil</td><td id="soil">--</td></tr>
-</table>
-<p>Logging: <b id="log_state">--</b></p>
-<p id="msg" style="color:green"></p>
-<br>
-<label for="interval">Log interval (s):&nbsp;</label>
-<input id="interval" type="number" min="1" value="60" style="width:60px">
-<br><br>
-<button onclick="cmd('/read-now','POST','Reading...')">Read Now</button>
-<button onclick="start_logging()">Start Logging</button>
-<button onclick="cmd('/stop','POST','Logging stopped')">Stop Logging</button>
-<button id="dl_btn" onclick="download_csv()">Download CSV</button>
-<button onclick="cmd('/clear','POST','Log cleared')">Clear Log</button>
-<hr>
-<h2>Soil Calibration</h2>
-<p id="cal_info" style="color:gray">Loading...</p>
-<p><b>Step 1 — Dry:</b> Hold the sensor in open air, then click &rarr;
-  <button onclick="calibrate('dry')">Capture Dry</button></p>
-<p><b>Step 2 — Wet:</b> Submerge the sensor tip in water, then click &rarr;
-  <button onclick="calibrate('wet')">Capture Wet</button></p>
-<button onclick="cmd('/calibrate-clear','POST','Calibration cleared')">Clear Calibration</button>
-<p id="cal_msg" style="color:blue"></p>
-<script>
-function cmd(url,method,msg){
-  fetch(url,{method:method}).then(function(){
-    document.getElementById('msg').textContent=msg;
-    poll();
-  });
+
+static bool parse_slot_arg(uint8_t& slot_out) {
+    String value = _server.arg("slot");
+    if (value.length() == 0 || value.length() > 2) {
+        return false;
+    }
+    for (size_t i = 0; i < value.length(); ++i) {
+        if (!isdigit(static_cast<unsigned char>(value[i]))) {
+            return false;
+        }
+    }
+    long slot = value.toInt();
+    if (slot < 0 || slot >= logger::MAX_LOG_FILES) {
+        return false;
+    }
+    slot_out = static_cast<uint8_t>(slot);
+    return true;
 }
-function start_logging(){
-  var secs=parseInt(document.getElementById('interval').value)||60;
-  if(secs<1)secs=1;
-  cmd('/start?interval='+secs,'POST','Logging started');
+
+static const char* basename_for_path(const char* path) {
+    if (path == nullptr) {
+        return "";
+    }
+    return path[0] == '/' ? path + 1 : path;
 }
-function download_csv(){
-  window.location.href='/download.csv';
-}
-function calibrate(point){
-  fetch('/calibrate-'+point,{method:'POST'}).then(function(r){return r.text();}).then(function(t){
-    document.getElementById('cal_msg').textContent=t;
-    poll();
-  });
-}
-function poll(){
-  fetch('/api/status').then(function(r){return r.json();}).then(function(d){
-    document.getElementById('temp').textContent=d.temp_c.toFixed(1)+' \u00b0C';
-    document.getElementById('rh').textContent=d.rh_pct.toFixed(1)+' %';
-    document.getElementById('pres').textContent=d.pressure_hpa>0?d.pressure_hpa.toFixed(1)+' hPa':'N/A';
-    document.getElementById('lux').textContent=d.lux+' lx';
-    document.getElementById('soil').textContent=d.soil_calibrated?d.soil_pct.toFixed(0)+' %':'raw='+d.soil_raw;
-    document.getElementById('log_state').textContent=d.logging?'ACTIVE':'STOPPED';
-    document.getElementById('interval').disabled=d.logging;
-    document.getElementById('dl_btn').disabled=d.logging||!d.download_available;
-    var dry=d.cal_dry,wet=d.cal_wet,s;
-    if(dry>0&&wet>0){s='dry='+dry+' | wet='+wet;}
-    else if(dry>0){s='dry='+dry+' | wet=?';}
-    else if(wet>0){s='dry=? | wet='+wet;}
-    else{s='Not calibrated';}
-    document.getElementById('cal_info').textContent='Stored calibration: '+s;
-  });
-}
-poll();
-setInterval(poll,5000);
-</script>
-</body>
-</html>
-)rawliteral";
 
 // ---------------------------------------------------------------------------
 // HTTP handlers (file-scope; registered in begin())
@@ -150,6 +95,33 @@ static void handle_status() {
     _server.send(200, "application/json", buf);
 }
 
+static void handle_logs() {
+    logger::LogFileInfo files[logger::MAX_LOG_FILES];
+    uint8_t count = logger::list_files(files, logger::MAX_LOG_FILES);
+
+    String body;
+    body.reserve(48 + static_cast<size_t>(count) * 112);
+    body = "{\"logs\":[";
+    for (uint8_t i = 0; i < count; ++i) {
+        if (i > 0) {
+            body += ',';
+        }
+        body += "{\"slot\":";
+        body += String(files[i].slot);
+        body += ",\"filename\":\"";
+        body += basename_for_path(files[i].path);
+        body += "\",\"path\":\"";
+        body += files[i].path;
+        body += "\",\"size_bytes\":";
+        body += String(static_cast<unsigned long>(files[i].size_bytes));
+        body += ",\"is_latest\":";
+        body += files[i].is_latest ? "true" : "false";
+        body += '}';
+    }
+    body += "]}";
+    _server.send(200, "application/json", body);
+}
+
 static void handle_read_now() {
     _read_req = true;
     _server.send(200, "text/plain", "OK");
@@ -157,7 +129,7 @@ static void handle_read_now() {
 
 static void handle_start() {
     if (_logging) {
-        _server.send(409, "text/plain", "Already logging — stop the current session first");
+        _server.send(409, "text/plain", "Already logging - stop the current session first");
         return;
     }
     String interval_str = _server.arg("interval");
@@ -183,17 +155,36 @@ static void handle_download_csv() {
         _server.send(409, "text/plain", "Stop logging before downloading");
         return;
     }
-    const char* path = logger::get_latest_filename();
+
+    const char* path = nullptr;
+    bool slot_requested = _server.hasArg("slot");
+    if (slot_requested) {
+        uint8_t slot = 0;
+        if (!parse_slot_arg(slot)) {
+            _server.send(400, "text/plain", "Invalid log slot");
+            return;
+        }
+        path = logger::get_filename_for_slot(slot);
+    } else {
+        path = logger::get_latest_filename();
+    }
+
     if (path == nullptr) {
         _server.send(404, "text/plain", "No log file available");
         return;
     }
+
     File f = LittleFS.open(path, "r");
     if (!f || f.isDirectory()) {
         _server.send(500, "text/plain", "Failed to open log file");
         return;
     }
-    _server.sendHeader("Content-Disposition", "attachment; filename=\"plantlogger.csv\"");
+
+    char disposition[72];
+    snprintf(disposition, sizeof(disposition),
+             "attachment; filename=\"%s\"",
+             slot_requested ? basename_for_path(path) : "plantlogger.csv");
+    _server.sendHeader("Content-Disposition", disposition);
     _server.streamFile(f, "text/csv");
     f.close();
 }
@@ -289,7 +280,7 @@ void begin() {
              WiFi.softAPIP().toString().c_str());
 
     // Seed pending calibration state from whatever is already in NVS so that
-    // single-point updates (e.g. recapture only the wet point) work correctly.
+    // single-point updates (for example, recapture only the wet point) work.
     {
         soil::CalibrationData cal = soil::get_calibration();
         if (cal.valid) {
@@ -307,6 +298,7 @@ void begin() {
     // Main routes
     _server.on("/",                  HTTP_GET,  handle_root);
     _server.on("/api/status",        HTTP_GET,  handle_status);
+    _server.on("/api/logs",          HTTP_GET,  handle_logs);
     _server.on("/read-now",          HTTP_POST, handle_read_now);
     _server.on("/start",             HTTP_POST, handle_start);
     _server.on("/stop",              HTTP_POST, handle_stop);

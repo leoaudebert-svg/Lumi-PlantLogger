@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="robots" content="noindex,nofollow">
+    <title>PlantLogger</title>
+    <!-- PLANTLOGGER_STYLE -->
+  </head>
+  <body>
+    <div class="page">
+      <main class="shell">
+        <header class="app-header">
+          <div class="brand-row">
+            <div class="brand-mark" aria-hidden="true">
+              <svg viewBox="0 0 24 24" focusable="false">
+                <path d="M12 21c4-3 7-6.8 7-11.2A5.8 5.8 0 0 0 13.2 4c-2.3 0-4.3 1.3-5.2 3.2C5 7.6 3 10 3 13c0 3.8 3.5 6.7 9 8Z"></path>
+                <path d="M12 21c.4-6.1 1.7-9.8 5-13"></path>
+              </svg>
+            </div>
+            <div>
+              <div class="title-row">
+                <h1>PlantLogger</h1>
+                <span class="version-pill">v1.0</span>
+              </div>
+              <p class="muted">Live plant health and environment monitor</p>
+            </div>
+          </div>
+          <div class="status-pills">
+            <span id="loggingBadge" class="pill warning"><span class="dot"></span>Logging off</span>
+            <span id="deviceBadge" class="pill success"><span class="dot"></span>Device online</span>
+          </div>
+        </header>
+
+        <section class="section-head">
+          <div>
+            <h2>Live metrics</h2>
+            <p class="muted">Current readings from the local device.</p>
+          </div>
+          <span id="lastSync" class="sync-pill">Last sync: pending</span>
+        </section>
+
+        <section class="metrics-grid" aria-label="Live sensor readings">
+          <article class="metric-card primary">
+            <div class="metric-top">
+              <span class="metric-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" focusable="false">
+                  <path d="M12 22a7 7 0 0 0 7-7c0-4-7-13-7-13S5 11 5 15a7 7 0 0 0 7 7Z"></path>
+                </svg>
+              </span>
+              <div>
+                <p class="label">Soil moisture</p>
+                <p id="soilState" class="state">Waiting for data</p>
+              </div>
+            </div>
+            <div class="metric-main">
+              <span id="soilValue" class="metric-value">--</span>
+              <span id="soilUnit" class="metric-unit">%</span>
+            </div>
+            <p id="soilHelper" class="metric-helper">Calibrated readings appear here.</p>
+          </article>
+
+          <article class="metric-card">
+            <div class="metric-top">
+              <span class="metric-icon amber" aria-hidden="true">
+                <svg viewBox="0 0 24 24" focusable="false">
+                  <path d="M14 14.8V5a2 2 0 0 0-4 0v9.8a4 4 0 1 0 4 0Z"></path>
+                </svg>
+              </span>
+              <p class="label">Temperature</p>
+            </div>
+            <div class="metric-main">
+              <span id="tempValue" class="metric-value">--</span>
+              <span class="metric-unit">&deg;C</span>
+            </div>
+            <p id="tempHelper" class="metric-helper">Updated on sync</p>
+          </article>
+
+          <article class="metric-card cool">
+            <div class="metric-top">
+              <span class="metric-icon teal" aria-hidden="true">
+                <svg viewBox="0 0 24 24" focusable="false">
+                  <path d="M8 19a4 4 0 0 1-.6-8 6 6 0 0 1 11.2 2A3 3 0 0 1 18 19H8Z"></path>
+                  <path d="M9 22v-2M13 22v-2M17 22v-2"></path>
+                </svg>
+              </span>
+              <p class="label">Humidity</p>
+            </div>
+            <div class="metric-main">
+              <span id="humidityValue" class="metric-value">--</span>
+              <span class="metric-unit">%</span>
+            </div>
+            <p id="humidityHelper" class="metric-helper">Updated on sync</p>
+          </article>
+
+          <article class="metric-card sun">
+            <div class="metric-top">
+              <span class="metric-icon gold" aria-hidden="true">
+                <svg viewBox="0 0 24 24" focusable="false">
+                  <circle cx="12" cy="12" r="4"></circle>
+                  <path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"></path>
+                </svg>
+              </span>
+              <p class="label">Light</p>
+            </div>
+            <div class="metric-main">
+              <span id="lightValue" class="metric-value">--</span>
+              <span class="metric-unit">lux</span>
+            </div>
+            <p id="lightHelper" class="metric-helper">Updated on sync</p>
+          </article>
+
+          <article class="metric-card">
+            <div class="metric-top">
+              <span class="metric-icon rust" aria-hidden="true">
+                <svg viewBox="0 0 24 24" focusable="false">
+                  <path d="M12 14a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z"></path>
+                  <path d="M12 2v3M12 19v3M4.9 4.9 7 7M17 17l2.1 2.1M2 12h3M19 12h3M4.9 19.1 7 17M17 7l2.1-2.1"></path>
+                </svg>
+              </span>
+              <p class="label">Pressure</p>
+            </div>
+            <div class="metric-main">
+              <span id="pressureValue" class="metric-value">--</span>
+              <span class="metric-unit">hPa</span>
+            </div>
+            <p id="pressureHelper" class="metric-helper">Updated on sync</p>
+          </article>
+        </section>
+
+        <section class="summary-card">
+          <div class="summary-head">
+            <div>
+              <h2>Plant health summary</h2>
+              <p class="muted">Simple hints from the latest readings.</p>
+            </div>
+            <span id="overallBadge" class="summary-badge">Overall: pending</span>
+          </div>
+          <div class="summary-grid">
+            <article>
+              <p id="soilSummaryTitle" class="summary-title">Waiting for soil data</p>
+              <p id="soilSummaryDetail" class="muted">Capture a reading to update this hint.</p>
+            </article>
+            <article>
+              <p id="lightSummaryTitle" class="summary-title">Waiting for light data</p>
+              <p id="lightSummaryDetail" class="muted">Capture a reading to update this hint.</p>
+            </article>
+            <article>
+              <p id="climateSummaryTitle" class="summary-title">Waiting for climate data</p>
+              <p id="climateSummaryDetail" class="muted">Capture a reading to update this hint.</p>
+            </article>
+          </div>
+        </section>
+
+        <section class="controls-grid">
+          <article class="panel controls-panel">
+            <div class="panel-head">
+              <div>
+                <h2>Quick actions</h2>
+                <p class="muted">Read, log, export, and clear data.</p>
+              </div>
+            </div>
+            <label class="interval-field" for="intervalInput">
+              <span>Log interval</span>
+              <span class="interval-control">
+                <input id="intervalInput" type="number" min="1" value="60">
+                <span>sec</span>
+              </span>
+            </label>
+            <div class="button-grid">
+              <button id="readNowButton" class="button primary-action" type="button">
+                <span class="button-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" focusable="false"><path d="M4 12a8 8 0 0 1 14.9-4M20 12a8 8 0 0 1-14.9 4"></path><path d="M18 3v5h-5M6 21v-5h5"></path></svg>
+                </span>
+                Read now
+              </button>
+              <button id="startButton" class="button" type="button">
+                <span class="button-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" focusable="false"><path d="M8 5v14l11-7-11-7Z"></path></svg>
+                </span>
+                Start logging
+              </button>
+              <button id="stopButton" class="button" type="button">
+                <span class="button-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" focusable="false"><rect x="6" y="6" width="12" height="12" rx="2"></rect></svg>
+                </span>
+                Stop logging
+              </button>
+              <button id="downloadLatestButton" class="button" type="button">
+                <span class="button-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" focusable="false"><path d="M12 3v12M7 10l5 5 5-5"></path><path d="M5 21h14"></path></svg>
+                </span>
+                Download latest
+              </button>
+              <button id="clearButton" class="button danger" type="button">
+                <span class="button-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" focusable="false"><path d="M4 7h16M10 11v6M14 11v6"></path><path d="M6 7l1 14h10l1-14M9 7V4h6v3"></path></svg>
+                </span>
+                Clear logs
+              </button>
+            </div>
+            <p id="message" class="message" role="status" aria-live="polite"></p>
+          </article>
+
+          <article class="panel calibration-panel">
+            <div class="panel-head">
+              <div>
+                <h2>Soil calibration</h2>
+                <p class="muted">Capture dry and wet limits for accurate moisture.</p>
+              </div>
+            </div>
+            <div class="cal-values" aria-label="Stored calibration values">
+              <span id="dryValue">Dry: --</span>
+              <span id="wetValue">Wet: --</span>
+            </div>
+            <div class="button-grid compact">
+              <button id="captureDryButton" class="button" type="button">Capture dry</button>
+              <button id="captureWetButton" class="button" type="button">Capture wet</button>
+              <button id="clearCalibrationButton" class="button danger" type="button">Clear calibration</button>
+            </div>
+            <p id="calibrationMessage" class="message info" role="status" aria-live="polite"></p>
+          </article>
+        </section>
+
+        <section class="panel logs-panel">
+          <div class="logs-head">
+            <div>
+              <h2>Available logs</h2>
+              <p class="muted">Completed CSV sessions stored on the device.</p>
+            </div>
+            <span id="logsCount" class="sync-pill">0 files</span>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>File</th>
+                  <th>Slot</th>
+                  <th>Size</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody id="logsBody">
+                <tr>
+                  <td colspan="4" class="empty-cell">No completed logs yet.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <footer class="footer">
+          <span>PlantLogger local device dashboard</span>
+        </footer>
+      </main>
+    </div>
+    <!-- PLANTLOGGER_SCRIPT -->
+  </body>
+</html>

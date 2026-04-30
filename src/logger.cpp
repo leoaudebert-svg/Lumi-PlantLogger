@@ -9,7 +9,6 @@ static const char* TAG = "logger";
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
-static constexpr uint8_t MAX_FILES        = 5;
 static constexpr size_t  ROW_BUF_SIZE     = 128;
 static constexpr uint8_t FLUSH_EVERY_ROWS = 30;
 static constexpr char    INDEX_FILE[]     = "/log_index";
@@ -31,6 +30,19 @@ static uint8_t _unflushed_rows      = 0;  // rows written since last flush
 static void slot_path(char* buf, size_t len, uint8_t slot)
 {
     snprintf(buf, len, "/log_%u.csv", slot);
+}
+
+static bool slot_is_available(uint8_t slot)
+{
+    if (slot >= logger::MAX_LOG_FILES) {
+        return false;
+    }
+    if (_session_open && _current_slot == static_cast<int8_t>(slot)) {
+        return false;
+    }
+    char path[logger::LOG_PATH_LEN];
+    slot_path(path, sizeof(path), slot);
+    return LittleFS.exists(path);
 }
 
 static void save_next_slot()
@@ -57,7 +69,7 @@ static void load_next_slot()
     }
     int v = f.read();
     f.close();
-    _next_slot = (v >= 0 && v < MAX_FILES) ? static_cast<uint8_t>(v) : 0;
+    _next_slot = (v >= 0 && v < logger::MAX_LOG_FILES) ? static_cast<uint8_t>(v) : 0;
 }
 
 // ---------------------------------------------------------------------------
@@ -84,8 +96,8 @@ bool begin()
     // Infer the last completed slot from the persisted next-slot pointer.
     // The slot written most recently is (_next_slot - 1) in round-robin order.
     // If that file exists, make it available for download immediately after boot.
-    uint8_t candidate = (_next_slot + MAX_FILES - 1) % MAX_FILES;
-    char path[16];
+    uint8_t candidate = (_next_slot + logger::MAX_LOG_FILES - 1) % logger::MAX_LOG_FILES;
+    char path[LOG_PATH_LEN];
     slot_path(path, sizeof(path), candidate);
     if (LittleFS.exists(path)) {
         _last_completed_slot = static_cast<int8_t>(candidate);
@@ -103,7 +115,7 @@ bool start_new_session()
         return false;
     }
 
-    char path[16];
+    char path[LOG_PATH_LEN];
     slot_path(path, sizeof(path), _next_slot);
 
     // In round-robin rotation the slot we are about to write holds the
@@ -126,7 +138,7 @@ bool start_new_session()
     _session_open    = true;
     _unflushed_rows  = 0;
 
-    _next_slot = (_next_slot + 1) % MAX_FILES;
+    _next_slot = (_next_slot + 1) % MAX_LOG_FILES;
     save_next_slot();
 
     ESP_LOGI(TAG, "Logging session started -> %s", path);
@@ -190,9 +202,54 @@ const char* get_latest_filename()
         return nullptr;
     }
     // NOTE: single-threaded Arduino loop; no concurrent access is possible.
-    static char buf[16];
+    static char buf[LOG_PATH_LEN];
     slot_path(buf, sizeof(buf), static_cast<uint8_t>(_last_completed_slot));
     return LittleFS.exists(buf) ? buf : nullptr;
+}
+
+const char* get_filename_for_slot(uint8_t slot)
+{
+    if (!slot_is_available(slot)) {
+        return nullptr;
+    }
+    static char buf[LOG_PATH_LEN];
+    slot_path(buf, sizeof(buf), slot);
+    return buf;
+}
+
+uint8_t list_files(LogFileInfo* out, uint8_t max_items)
+{
+    if (out == nullptr || max_items == 0) {
+        return 0;
+    }
+
+    uint8_t count = 0;
+    for (uint8_t offset = 0; offset < MAX_LOG_FILES && count < max_items; ++offset) {
+        uint8_t slot = offset;
+        if (_last_completed_slot >= 0) {
+            slot = static_cast<uint8_t>(
+                (_last_completed_slot + MAX_LOG_FILES - offset) % MAX_LOG_FILES);
+        }
+        if (!slot_is_available(slot)) {
+            continue;
+        }
+
+        slot_path(out[count].path, sizeof(out[count].path), slot);
+        File f = LittleFS.open(out[count].path, "r");
+        if (!f || f.isDirectory()) {
+            if (f) {
+                f.close();
+            }
+            continue;
+        }
+        out[count].slot       = slot;
+        out[count].size_bytes = f.size();
+        out[count].is_latest  = (_last_completed_slot == static_cast<int8_t>(slot));
+        f.close();
+        ++count;
+    }
+
+    return count;
 }
 
 void clear_all()
@@ -201,8 +258,8 @@ void clear_all()
         ESP_LOGW(TAG, "clear_all called while session is open — ignored");
         return;
     }
-    for (uint8_t i = 0; i < MAX_FILES; i++) {
-        char path[16];
+    for (uint8_t i = 0; i < MAX_LOG_FILES; i++) {
+        char path[LOG_PATH_LEN];
         slot_path(path, sizeof(path), i);
         if (LittleFS.exists(path)) {
             LittleFS.remove(path);
