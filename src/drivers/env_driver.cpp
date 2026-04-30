@@ -38,7 +38,7 @@ bool begin() {
     ESP_LOGI(TAG, "SHT30 initialized (addr 0x%02X)", SHT30_ADDR);
 
     uint8_t qmp_ret = _qmp6988.init(QMP6988_ADDR, &Wire);
-    _qmp_available = (qmp_ret == 0);
+    _qmp_available = (qmp_ret != 0);
     if (!_qmp_available) {
         ESP_LOGW(TAG, "QMP6988 init failed (addr 0x%02X, ret=%d) — pressure unavailable",
                  QMP6988_ADDR, qmp_ret);

@@ -130,8 +130,12 @@ static void do_sensor_read()
         logger::append_row(millis(), _last_env_r, _last_lux, _last_soil_r);
     }
 
-    ESP_LOGI(TAG, "Read: %.1f C  %.1f %%  %u lx  soil raw=%u",
-             _last_env_r.temp_c, _last_env_r.rh_pct, _last_lux, _last_soil_r.raw);
+    ESP_LOGI(TAG, "Read: %.1f C  %.1f %%  %.1f hPa  %u lx  soil raw=%u",
+             _last_env_r.temp_c,
+             _last_env_r.rh_pct,
+             _last_env_r.pressure_pa / 100.0f,
+             _last_lux,
+             _last_soil_r.raw);
 }
 
 void setup()
