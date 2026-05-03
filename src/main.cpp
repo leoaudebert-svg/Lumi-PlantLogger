@@ -193,12 +193,18 @@ void loop()
         if (!_fs_ok) {
             ESP_LOGW(TAG, "Logging requested but LittleFS is unavailable — ignoring");
             webserver::set_logging(false);
+            logging_now = false;
         } else {
-            logger::start_new_session();
-            // Trigger an immediate first reading at the start of the session.
-            // Back-date so the interval check fires immediately on the first tick.
-            _last_log_ms = millis() - webserver::get_log_interval_ms();
-            ESP_LOGI(TAG, "Logging started");
+            if (logger::start_new_session(webserver::get_log_name())) {
+                // Trigger an immediate first reading at the start of the session.
+                // Back-date so the interval check fires immediately on the first tick.
+                _last_log_ms = millis() - webserver::get_log_interval_ms();
+                ESP_LOGI(TAG, "Logging started");
+            } else {
+                ESP_LOGE(TAG, "Logging requested but session could not be opened");
+                webserver::set_logging(false);
+                logging_now = false;
+            }
         }
     } else if (!logging_now && _was_logging) {
         logger::stop_session();
@@ -221,12 +227,8 @@ void loop()
         }
     }
 
-    // Physical long-press → toggle logging on/off.
-    if (button::was_long_press()) {
-        bool next = !webserver::is_logging();
-        webserver::set_logging(next);
-        ESP_LOGI(TAG, "Logging %s via button", next ? "started" : "stopped");
-    }
+    // Long-press logging is disabled because every session now needs a name
+    // from the dashboard before it can start.
 
     vTaskDelay(1);
 }

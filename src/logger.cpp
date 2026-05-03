@@ -2,6 +2,7 @@
 
 #include <LittleFS.h>
 #include <esp_log.h>
+#include <ctype.h>
 #include <stdio.h>
 
 static const char* TAG = "logger";
@@ -32,6 +33,11 @@ static void slot_path(char* buf, size_t len, uint8_t slot)
     snprintf(buf, len, "/log_%u.csv", slot);
 }
 
+static void meta_path(char* buf, size_t len, uint8_t slot)
+{
+    snprintf(buf, len, "/log_%u.meta", slot);
+}
+
 static bool slot_is_available(uint8_t slot)
 {
     if (slot >= logger::MAX_LOG_FILES) {
@@ -43,6 +49,94 @@ static bool slot_is_available(uint8_t slot)
     char path[logger::LOG_PATH_LEN];
     slot_path(path, sizeof(path), slot);
     return LittleFS.exists(path);
+}
+
+static bool names_equal_ci(const char* a, const char* b)
+{
+    if (a == nullptr || b == nullptr) {
+        return false;
+    }
+    while (*a != '\0' && *b != '\0') {
+        char ca = static_cast<char>(tolower(static_cast<unsigned char>(*a)));
+        char cb = static_cast<char>(tolower(static_cast<unsigned char>(*b)));
+        if (ca != cb) {
+            return false;
+        }
+        ++a;
+        ++b;
+    }
+    return *a == '\0' && *b == '\0';
+}
+
+static bool read_log_name(uint8_t slot, char* out, size_t len)
+{
+    if (out == nullptr || len == 0) {
+        return false;
+    }
+    out[0] = '\0';
+
+    char path[logger::LOG_PATH_LEN];
+    meta_path(path, sizeof(path), slot);
+    if (!LittleFS.exists(path)) {
+        return false;
+    }
+
+    File f = LittleFS.open(path, "r");
+    if (!f || f.isDirectory()) {
+        if (f) {
+            f.close();
+        }
+        return false;
+    }
+
+    size_t n = f.readBytes(out, len - 1);
+    f.close();
+    out[n] = '\0';
+    while (n > 0 && (out[n - 1] == '\r' || out[n - 1] == '\n')) {
+        out[--n] = '\0';
+    }
+    return n > 0;
+}
+
+static void display_name_for_slot(uint8_t slot, char* out, size_t len)
+{
+    if (out == nullptr || len == 0) {
+        return;
+    }
+    if (!read_log_name(slot, out, len)) {
+        snprintf(out, len, "Legacy log %u", static_cast<unsigned int>(slot + 1));
+    }
+}
+
+static bool write_log_name(uint8_t slot, const char* name)
+{
+    char path[logger::LOG_PATH_LEN];
+    meta_path(path, sizeof(path), slot);
+
+    File f = LittleFS.open(path, "w");
+    if (!f) {
+        ESP_LOGE(TAG, "Failed to open %s for metadata", path);
+        return false;
+    }
+    f.print(name);
+    f.close();
+    return true;
+}
+
+static void remove_slot_files(uint8_t slot)
+{
+    char path[logger::LOG_PATH_LEN];
+
+    slot_path(path, sizeof(path), slot);
+    if (LittleFS.exists(path)) {
+        LittleFS.remove(path);
+        ESP_LOGI(TAG, "Removed %s", path);
+    }
+
+    meta_path(path, sizeof(path), slot);
+    if (LittleFS.exists(path)) {
+        LittleFS.remove(path);
+    }
 }
 
 static void save_next_slot()
@@ -95,7 +189,7 @@ bool begin()
 
     // Infer the last completed slot from the persisted next-slot pointer.
     // The slot written most recently is (_next_slot - 1) in round-robin order.
-    // If that file exists, make it available for download immediately after boot.
+    // If that file exists, make it visible in the completed log list after boot.
     uint8_t candidate = (_next_slot + logger::MAX_LOG_FILES - 1) % logger::MAX_LOG_FILES;
     char path[LOG_PATH_LEN];
     slot_path(path, sizeof(path), candidate);
@@ -108,10 +202,14 @@ bool begin()
     return true;
 }
 
-bool start_new_session()
+bool start_new_session(const char* name)
 {
     if (_session_open) {
         ESP_LOGW(TAG, "Session already open — ignoring start_new_session");
+        return false;
+    }
+    if (name == nullptr || name[0] == '\0') {
+        ESP_LOGW(TAG, "Session name is required");
         return false;
     }
 
@@ -120,14 +218,17 @@ bool start_new_session()
 
     // In round-robin rotation the slot we are about to write holds the
     // oldest data (or does not exist yet); remove it before overwriting.
-    if (LittleFS.exists(path)) {
-        LittleFS.remove(path);
-        ESP_LOGI(TAG, "Rotated out %s", path);
-    }
+    remove_slot_files(_next_slot);
 
     _file = LittleFS.open(path, "w");
     if (!_file) {
         ESP_LOGE(TAG, "Failed to open %s for writing", path);
+        return false;
+    }
+
+    if (!write_log_name(_next_slot, name)) {
+        _file.close();
+        LittleFS.remove(path);
         return false;
     }
 
@@ -141,7 +242,7 @@ bool start_new_session()
     _next_slot = (_next_slot + 1) % MAX_LOG_FILES;
     save_next_slot();
 
-    ESP_LOGI(TAG, "Logging session started -> %s", path);
+    ESP_LOGI(TAG, "Logging session started -> %s (%s)", path, name);
     return true;
 }
 
@@ -217,6 +318,25 @@ const char* get_filename_for_slot(uint8_t slot)
     return buf;
 }
 
+bool name_exists(const char* name)
+{
+    if (name == nullptr || name[0] == '\0') {
+        return false;
+    }
+
+    char existing[LOG_NAME_LEN];
+    for (uint8_t slot = 0; slot < MAX_LOG_FILES; ++slot) {
+        if (!slot_is_available(slot)) {
+            continue;
+        }
+        display_name_for_slot(slot, existing, sizeof(existing));
+        if (names_equal_ci(existing, name)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 uint8_t list_files(LogFileInfo* out, uint8_t max_items)
 {
     if (out == nullptr || max_items == 0) {
@@ -245,11 +365,38 @@ uint8_t list_files(LogFileInfo* out, uint8_t max_items)
         out[count].slot       = slot;
         out[count].size_bytes = f.size();
         out[count].is_latest  = (_last_completed_slot == static_cast<int8_t>(slot));
+        display_name_for_slot(slot, out[count].name, sizeof(out[count].name));
         f.close();
         ++count;
     }
 
     return count;
+}
+
+void get_storage_info(StorageInfo& out)
+{
+    out.total_bytes = LittleFS.totalBytes();
+    out.used_bytes  = LittleFS.usedBytes();
+    out.free_bytes  = out.total_bytes > out.used_bytes ? out.total_bytes - out.used_bytes : 0;
+    out.log_bytes   = 0;
+
+    for (uint8_t slot = 0; slot < MAX_LOG_FILES; ++slot) {
+        char path[LOG_PATH_LEN];
+        slot_path(path, sizeof(path), slot);
+        if (!LittleFS.exists(path)) {
+            continue;
+        }
+
+        File f = LittleFS.open(path, "r");
+        if (!f || f.isDirectory()) {
+            if (f) {
+                f.close();
+            }
+            continue;
+        }
+        out.log_bytes += f.size();
+        f.close();
+    }
 }
 
 void clear_all()
@@ -259,11 +406,7 @@ void clear_all()
         return;
     }
     for (uint8_t i = 0; i < MAX_LOG_FILES; i++) {
-        char path[LOG_PATH_LEN];
-        slot_path(path, sizeof(path), i);
-        if (LittleFS.exists(path)) {
-            LittleFS.remove(path);
-        }
+        remove_slot_files(i);
     }
     if (LittleFS.exists(INDEX_FILE)) {
         LittleFS.remove(INDEX_FILE);

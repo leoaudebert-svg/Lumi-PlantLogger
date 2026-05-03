@@ -50,4 +50,7 @@ namespace webserver {
     // Default is 60 000 ms (60 s) until /start is called with an interval arg.
     uint32_t get_log_interval_ms();
 
+    // Returns the validated customer-facing name for the pending session.
+    const char* get_log_name();
+
 } // namespace webserver

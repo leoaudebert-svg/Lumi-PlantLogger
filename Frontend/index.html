@@ -2,8 +2,12 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <meta name="robots" content="noindex,nofollow">
+    <meta name="theme-color" content="#edf7ee">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="PlantLogger">
     <title>PlantLogger</title>
     <!-- PLANTLOGGER_STYLE -->
   </head>
@@ -32,6 +36,7 @@
           </div>
         </header>
 
+        <div id="dashboardView">
         <section class="section-head">
           <div>
             <h2>Live metrics</h2>
@@ -157,16 +162,23 @@
             <div class="panel-head">
               <div>
                 <h2>Quick actions</h2>
-                <p class="muted">Read, log, export, and clear data.</p>
+                <p class="muted">Read, log, and clear data.</p>
               </div>
             </div>
-            <label class="interval-field" for="intervalInput">
-              <span>Log interval</span>
-              <span class="interval-control">
-                <input id="intervalInput" type="number" min="1" value="60">
-                <span>sec</span>
-              </span>
-            </label>
+            <div class="log-settings">
+              <label class="log-field name-field" for="logNameInput">
+                <span>Log name</span>
+                <input id="logNameInput" type="text" maxlength="32" placeholder="Basil window" readonly disabled>
+              </label>
+              <label class="log-field interval-field" for="intervalInput">
+                <span>Log interval</span>
+                <span class="interval-control">
+                  <input id="intervalInput" type="number" min="1" value="60">
+                  <span>sec</span>
+                </span>
+              </label>
+            </div>
+            <p id="logNameHint" class="field-hint" aria-live="polite"></p>
             <div class="button-grid">
               <button id="readNowButton" class="button primary-action" type="button">
                 <span class="button-icon" aria-hidden="true">
@@ -185,12 +197,6 @@
                   <svg viewBox="0 0 24 24" focusable="false"><rect x="6" y="6" width="12" height="12" rx="2"></rect></svg>
                 </span>
                 Stop logging
-              </button>
-              <button id="downloadLatestButton" class="button" type="button">
-                <span class="button-icon" aria-hidden="true">
-                  <svg viewBox="0 0 24 24" focusable="false"><path d="M12 3v12M7 10l5 5 5-5"></path><path d="M5 21h14"></path></svg>
-                </span>
-                Download latest
               </button>
               <button id="clearButton" class="button danger" type="button">
                 <span class="button-icon" aria-hidden="true">
@@ -230,29 +236,57 @@
             </div>
             <span id="logsCount" class="sync-pill">0 files</span>
           </div>
+          <div class="storage-block" aria-label="Device storage">
+            <div class="storage-top">
+              <span id="storageUsedLabel">Storage pending</span>
+              <span id="storageFreeLabel">-- free</span>
+            </div>
+            <div class="storage-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+              <span id="storageBarFill"></span>
+            </div>
+            <p id="storageLogLabel" class="muted">Logs: --</p>
+          </div>
           <div class="table-wrap">
             <table>
               <thead>
                 <tr>
-                  <th>File</th>
-                  <th>Slot</th>
+                  <th>Name</th>
                   <th>Size</th>
-                  <th>Action</th>
+                  <th>Graphs</th>
                 </tr>
               </thead>
               <tbody id="logsBody">
                 <tr>
-                  <td colspan="4" class="empty-cell">No completed logs yet.</td>
+                  <td colspan="3" class="empty-cell">No completed logs yet.</td>
                 </tr>
               </tbody>
             </table>
           </div>
+        </section>
+        </div>
+
+        <section id="graphView" class="graph-view" hidden>
+          <div class="graph-head">
+            <a class="graph-back" href="/">Back to logs</a>
+            <div>
+              <h2 id="graphTitle">Log graphs</h2>
+              <p id="graphMeta" class="muted">Loading log data.</p>
+            </div>
+          </div>
+          <p id="graphMessage" class="message" role="status" aria-live="polite"></p>
+          <div id="chartsGrid" class="charts-grid"></div>
         </section>
 
         <footer class="footer">
           <span>PlantLogger local device dashboard</span>
         </footer>
       </main>
+    </div>
+    <div id="pageLoader" class="page-loader" role="status" aria-live="polite" aria-hidden="true">
+      <div class="loader-card">
+        <span class="loader-spinner" aria-hidden="true"></span>
+        <span>Opening graphs...</span>
+      </div>
     </div>
     <!-- PLANTLOGGER_SCRIPT -->
   </body>

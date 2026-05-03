@@ -5,7 +5,7 @@ A plant monitoring and data-logging device built on the M5Stack AtomS3R.
 PlantLogger reads soil moisture, ambient light, air temperature, humidity, and
 atmospheric pressure at a configurable interval. It shows live readings on the
 built-in screen, serves a local web dashboard over Wi-Fi, and saves CSV logs to
-internal flash for download from a phone or laptop.
+internal flash for in-browser graph review.
 
 ## Features
 
@@ -19,8 +19,8 @@ internal flash for download from a phone or laptop.
 | Wi-Fi Access Point plus captive-portal web UI | MVP complete |
 | CSV log rotation, up to 5 files on LittleFS | MVP complete |
 | Soil moisture calibration via web UI | MVP complete |
-| Latest and per-slot CSV download over HTTP | MVP complete |
-| Physical button: short press reads now, long press toggles logging | MVP complete |
+| Named log sessions, storage bar, and per-log graphs | MVP complete |
+| Physical button: short press reads now | MVP complete |
 
 ## Hardware
 
@@ -58,7 +58,7 @@ pio device monitor
 2. On your phone or laptop, connect to the `PlantLogger` Wi-Fi network.
 3. Tap the captive-portal prompt, or open `http://192.168.4.1`.
 4. Use the dashboard to read sensors, start/stop logging, calibrate soil
-   moisture, download CSV files, and clear stored logs.
+   moisture, open log graphs, and clear stored logs.
 
 See [docs/GETTING_STARTED.md](docs/GETTING_STARTED.md) for the full walkthrough.
 
@@ -93,9 +93,8 @@ platformio.ini    PlatformIO build configuration
 
 - Run a 24-72 hour field trial beside a real plant.
 - Add browser-driven clock setting for wall-clock CSV timestamps.
-- Expand `/api/status` with uptime, free flash, current slot, sample count, and
-  last-read age.
-- Add dashboard mini charts for soil, lux, temperature, and humidity.
+- Expand `/api/status` with uptime, current slot, sample count, and last-read
+  age.
 - Add visible stale-data, sensor-failure, and low-storage warnings.
 - Tighten log interval validation in the API and dashboard.
 

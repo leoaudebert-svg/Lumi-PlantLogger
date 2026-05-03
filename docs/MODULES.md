@@ -32,7 +32,7 @@ Usage contract:
 Current app behavior:
 
 - Short press triggers one immediate sensor read.
-- Long press toggles logging on or off.
+- Long press has no logging action because sessions require dashboard names.
 
 ## `namespace dlight`
 
@@ -130,34 +130,45 @@ LittleFS-backed CSV session logger with 5-file round-robin rotation.
 ```cpp
 static constexpr uint8_t MAX_LOG_FILES = 5;
 static constexpr size_t  LOG_PATH_LEN  = 16;
+static constexpr size_t  LOG_NAME_LEN  = 33;
 
 struct LogFileInfo {
     uint8_t slot;
     char    path[LOG_PATH_LEN];
+    char    name[LOG_NAME_LEN];
     size_t  size_bytes;
     bool    is_latest;
+};
+
+struct StorageInfo {
+    size_t total_bytes;
+    size_t used_bytes;
+    size_t free_bytes;
+    size_t log_bytes;
 };
 ```
 
 Usage contract:
 
 1. Call `logger::begin()` once in `setup()`.
-2. Call `logger::start_new_session()` when logging starts.
+2. Call `logger::start_new_session(name)` when logging starts.
 3. Call `logger::append_row()` for every sensor snapshot.
 4. Call `logger::stop_session()` when logging ends.
-5. Use `logger::get_latest_filename()` or `logger::list_files()` for downloads.
+5. Use `logger::list_files()` for completed session metadata.
 6. Call `logger::clear_all()` only when no session is open.
 
 | Signature | Returns | Description |
 |---|---|---|
 | `bool begin()` | bool | Mount LittleFS and restore the next write slot |
-| `bool start_new_session()` | bool | Open a new CSV file and rotate the target slot if needed |
+| `bool start_new_session(const char* name)` | bool | Open a named CSV session and rotate the target slot if needed |
 | `void append_row(uint32_t ts_ms, const env::EnvReading&, uint16_t lux, const soil::SoilReading&)` | void | Append one CSV row; flushes every 30 rows |
 | `void stop_session()` | void | Flush pending rows and close the current file |
 | `bool is_session_open()` | bool | True while a session file is open |
 | `const char* get_latest_filename()` | `const char*` | Most recently completed file, or `nullptr` |
 | `const char* get_filename_for_slot(uint8_t slot)` | `const char*` | Completed file for a slot, or `nullptr` |
+| `bool name_exists(const char* name)` | bool | True when a completed log uses the name |
 | `uint8_t list_files(LogFileInfo* out, uint8_t max_items)` | uint8_t | Fill metadata for completed log files, newest-first when possible |
+| `void get_storage_info(StorageInfo& out)` | void | Fill LittleFS and CSV log byte totals |
 | `void clear_all()` | void | Delete all `/log_*.csv` files and reset rotation |
 
 CSV columns:
@@ -194,16 +205,18 @@ Usage contract:
 | `bool is_logging()` | bool | Read shared logging flag |
 | `bool consume_read_request()` | bool | True once after a `/read-now` POST |
 | `uint32_t get_log_interval_ms()` | uint32_t | Logging interval set by `/start`, default 60000 ms |
+| `const char* get_log_name()` | `const char*` | Validated pending session name |
 
 HTTP routes:
 
 - `GET /`
+- `GET /graphs`
 - `GET /api/status`
 - `GET /api/logs`
+- `GET /api/log-data`
 - `POST /read-now`
 - `POST /start`
 - `POST /stop`
-- `GET /download.csv`
 - `POST /clear`
 - `POST /calibrate-dry`
 - `POST /calibrate-wet`

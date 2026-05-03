@@ -15,15 +15,22 @@ Log files are stored at the root of the LittleFS partition:
 /log_4.csv
 ```
 
+Each completed slot also has a small metadata file with the customer-facing
+name shown in the dashboard:
+
+```text
+/log_0.meta
+...
+/log_4.meta
+```
+
 Up to 5 files are kept using round-robin rotation. When a sixth session starts,
 the slot that would be written next is overwritten. The write-slot pointer is
 persisted in `/log_index`, so rotation survives power cycles.
 
-The dashboard can download:
-
-- the latest completed session via `/download.csv`, named `plantlogger.csv` in
-  the browser; or
-- a specific completed slot via `/download.csv?slot=N`, named `log_N.csv`.
+New sessions must be named from the dashboard before logging starts. Names are
+stored separately from the CSV so internal rotation can keep using predictable
+slot paths.
 
 ## CSV Format
 
@@ -71,23 +78,27 @@ flushed when `logger::stop_session()` runs.
 If power is lost unexpectedly, up to 29 unflushed rows may be lost. Previously
 flushed rows remain intact.
 
-## Importing Into A Spreadsheet
+## Graphing In The Dashboard
 
 The CSV uses CRLF line endings for broad spreadsheet compatibility.
 
-### Microsoft Excel / LibreOffice Calc
+The dashboard reads completed CSV logs through `/api/log-data?slot=N` and draws
+one basic chart per metric against elapsed time from `timestamp_ms`.
 
-1. Download `plantlogger.csv` or a `log_N.csv` file from the dashboard.
-2. Open the file directly.
-3. Convert elapsed time with a formula such as `=A2/1000` for seconds since
-   boot.
+## Importing During Development
+
+The customer dashboard no longer exposes CSV downloads. For development or
+debugging, retrieve a completed slot from the inline graph-data endpoint and
+save the response locally if spreadsheet or pandas analysis is needed.
 
 ### Python With pandas
+
+Save a graph-data response as a CSV file, then read it:
 
 ```python
 import pandas as pd
 
-df = pd.read_csv("plantlogger.csv")
+df = pd.read_csv("log_2.csv")
 df["elapsed_s"] = df["timestamp_ms"] / 1000.0
 print(df.head())
 ```

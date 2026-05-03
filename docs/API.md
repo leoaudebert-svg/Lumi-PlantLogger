@@ -18,6 +18,13 @@ Returns the embedded single-page dashboard.
 
 **Response:** `200 text/html`
 
+### `GET /graphs?slot=<slot>`
+
+Returns the same embedded dashboard shell, opened in graph-view mode for a
+completed log slot.
+
+**Response:** `200 text/html`
+
 ### `GET /api/status`
 
 Returns a JSON snapshot of the most recent sensor readings, logging state, and
@@ -35,7 +42,6 @@ soil calibration values.
   "soil_pct": 42.0,
   "soil_calibrated": true,
   "logging": false,
-  "download_available": true,
   "cal_dry": 3210,
   "cal_wet": 1240
 }
@@ -51,7 +57,6 @@ soil calibration values.
 | `soil_pct` | float | Calibrated moisture percentage from 0-100 |
 | `soil_calibrated` | boolean | True when valid dry/wet calibration points are stored |
 | `logging` | boolean | True while a logging session is active |
-| `download_available` | boolean | True when a completed latest log exists and logging is stopped |
 | `cal_dry` | integer | Stored dry calibration ADC value; `0` if not set |
 | `cal_wet` | integer | Stored wet calibration ADC value; `0` if not set |
 
@@ -59,7 +64,7 @@ soil calibration values.
 
 Returns metadata for completed log files. Files are ordered newest-first when
 the latest completed slot is known. The currently open log file is not listed
-or downloadable while logging is active.
+while logging is active.
 
 **Response:** `200 application/json`
 
@@ -68,22 +73,52 @@ or downloadable while logging is active.
   "logs": [
     {
       "slot": 2,
+      "name": "Basil window",
       "filename": "log_2.csv",
       "path": "/log_2.csv",
       "size_bytes": 4280,
       "is_latest": true
     }
-  ]
+  ],
+  "storage": {
+    "total_bytes": 1441792,
+    "used_bytes": 24576,
+    "free_bytes": 1417216,
+    "log_bytes": 4280
+  }
 }
 ```
 
 | Field | Type | Description |
 |---|---|---|
 | `slot` | integer | Log slot number, from 0 to 4 |
+| `name` | string | Customer-facing session name |
 | `filename` | string | File basename suitable for display |
 | `path` | string | LittleFS path used internally by the firmware |
 | `size_bytes` | integer | File size in bytes |
 | `is_latest` | boolean | True for the most recently completed session |
+| `storage.total_bytes` | integer | Total LittleFS capacity in bytes |
+| `storage.used_bytes` | integer | Used LittleFS bytes |
+| `storage.free_bytes` | integer | Free LittleFS bytes |
+| `storage.log_bytes` | integer | Bytes used by CSV log files |
+
+### `GET /api/log-data?slot=<slot>`
+
+Streams one completed CSV log inline for the dashboard graph view. This is not
+served as a browser download.
+
+| Query parameter | Type | Default | Description |
+|---|---|---|---|
+| `slot` | integer, 0-4 | required | Completed log slot to graph |
+
+**Responses:**
+
+| Status | Body | Meaning |
+|---|---|---|
+| `200` | CSV data | File streamed as `text/csv` |
+| `400` | `Invalid log slot` | `slot` was missing or invalid |
+| `404` | `No log file available` | No matching completed file exists |
+| `500` | error message | Filesystem error opening the file |
 
 ### `POST /read-now`
 
@@ -93,12 +128,13 @@ a logging session is open.
 
 **Response:** `200 text/plain` with `OK`
 
-### `POST /start[?interval=<seconds>]`
+### `POST /start?name=<log_name>[&interval=<seconds>]`
 
 Starts a new logging session.
 
 | Query parameter | Type | Default | Description |
 |---|---|---|---|
+| `name` | string | required | Customer-facing log name, unique among stored sessions |
 | `interval` | integer seconds | 60 | Sensor sampling and logging interval |
 
 **Responses:**
@@ -106,10 +142,13 @@ Starts a new logging session.
 | Status | Body | Meaning |
 |---|---|---|
 | `200` | `OK` | Session started |
-| `409` | error message | A session is already active; stop it first |
+| `400` | error message | Name is missing or invalid |
+| `409` | error message | A session is active or the name already exists |
 
 Notes:
 
+- Names are trimmed, limited to 32 characters, and may use letters, numbers,
+  spaces, `_`, `-`, and `.`.
 - The interval is applied immediately and persists until `POST /stop` is called
   or the device reboots.
 - The first logged read is triggered immediately after the session opens.
@@ -117,30 +156,10 @@ Notes:
 ### `POST /stop`
 
 Stops the active logging session, flushes any buffered rows, and closes the CSV
-file. After this call the completed file is available for download.
+file. After this call the completed file appears in `/api/logs` and can be
+opened in the dashboard graph view.
 
 **Response:** `200 text/plain` with `OK`
-
-### `GET /download.csv[?slot=<slot>]`
-
-Streams a completed log file as a CSV attachment. Without a query parameter,
-the endpoint downloads the most recently completed log as `plantlogger.csv`.
-With `slot`, it downloads that specific completed slot using its real filename,
-such as `log_2.csv`.
-
-| Query parameter | Type | Default | Description |
-|---|---|---|---|
-| `slot` | integer, 0-4 | latest completed file | Specific log slot to download |
-
-**Responses:**
-
-| Status | Body | Meaning |
-|---|---|---|
-| `200` | CSV data | File streamed with a `Content-Disposition` attachment header |
-| `400` | `Invalid log slot` | `slot` was not a valid 0-4 integer |
-| `404` | `No log file available` | No matching completed file exists, or files were cleared |
-| `409` | `Stop logging before downloading` | A session is currently active |
-| `500` | error message | Filesystem error opening the file |
 
 ### `POST /clear`
 
@@ -209,8 +228,8 @@ Any other unrecognised path also redirects to the dashboard.
 ```sh
 BASE="http://192.168.4.1"
 
-# Start a 30-second logging session
-curl -X POST "$BASE/start?interval=30"
+# Start a named 30-second logging session
+curl -X POST "$BASE/start?name=Basil%20window&interval=30"
 
 # Read current status
 curl "$BASE/api/status"
@@ -218,23 +237,19 @@ curl "$BASE/api/status"
 # Stop after desired time
 curl -X POST "$BASE/stop"
 
-# Download the latest CSV
-curl -o plantlogger.csv "$BASE/download.csv"
-
-# List completed log slots
+# List completed logs and storage
 curl "$BASE/api/logs"
 
-# Download a specific slot
-curl -o log_2.csv "$BASE/download.csv?slot=2"
+# Read graph data for a specific slot
+curl "$BASE/api/log-data?slot=2"
 ```
 
 ## TODO - Next Session
 
 - Add browser-driven clock setting so CSV rows can include real wall-clock
   timestamps as well as `millis()`.
-- Expand `/api/status` with uptime, free flash, current log slot, sample count,
-  and last-read age.
-- Add dashboard mini charts for soil moisture, lux, temperature, and humidity.
+- Expand `/api/status` with uptime, current log slot, sample count, and
+  last-read age.
 - Add clearer stale-data and sensor-failure warnings to the dashboard.
 - Tighten interval validation to reject zero, huge, or accidental rapid-start
   values at both the API and UI layers.

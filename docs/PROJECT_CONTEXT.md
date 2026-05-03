@@ -54,13 +54,15 @@ Implemented:
 - Captive-portal DNS and redirects.
 - Embedded single-page dashboard from `Frontend/`.
 - `/api/status` JSON endpoint.
-- `/api/logs` metadata endpoint.
+- `/api/logs` metadata and LittleFS storage endpoint.
+- `/api/log-data` graph-data endpoint for completed slots.
 - Start/stop/read-now HTTP controls.
-- Latest and per-slot CSV downloads.
+- Customer-named log sessions.
+- Dashboard graph view for each completed log.
 - 5-file LittleFS round-robin log rotation.
 - Physical button shortcuts:
   - short press: read now
-  - long press: toggle logging
+  - long press: no logging action; sessions require dashboard names
 
 ## 3. Hardware Platform
 
@@ -207,7 +209,7 @@ Completed MVP:
 - Captive-portal web dashboard
 - Soil calibration
 - CSV logging
-- Log rotation and downloads
+- Named log rotation and graph review
 - HTTP API for automation
 
 Next phase:
@@ -277,7 +279,7 @@ Successful next milestone:
 
 - Runs continuously for 24-72 hours.
 - Logs at the selected interval with no unexpected gaps.
-- Produces downloadable CSVs from all completed slots.
+- Produces named completed logs with graphable CSV rows.
 - Calibration survives power cycles.
 - Dashboard remains reachable during the run.
 - Any sensor failure is visible rather than silent.
@@ -294,8 +296,8 @@ Field trial:
 
 - Run a 24-72 hour logging session beside a real plant.
 - Use a 60-300 second interval for realistic wear and data density.
-- Download the CSV and inspect timestamp gaps, unexpected zeros, calibration
-  drift, dashboard reachability, and file rotation.
+- Open the completed log graphs and inspect timestamp gaps, unexpected zeros,
+  calibration drift, dashboard reachability, and file rotation.
 - Record observations in `docs/GETTING_STARTED.md` or a new field-trial note.
 
 Clock and timestamps:
@@ -307,17 +309,16 @@ Clock and timestamps:
 
 Status and reliability:
 
-- Expand `/api/status` with uptime, free flash, current log slot, sample count,
-  and last-read age.
+- Expand `/api/status` with uptime, current log slot, sample count, and
+  last-read age.
 - Add API/UI validation for interval bounds.
 - Add visible warnings for stale readings and sensor failures.
 - Add low-storage or filesystem-unavailable warnings.
 
 Dashboard:
 
-- Add small in-browser trend charts for soil, lux, temperature, and humidity.
 - Show "last read" age instead of only "Last sync".
-- Improve log table feedback when logging is active and downloads are blocked.
+- Improve active-logging feedback in the log table.
 
 Data and analytics:
 

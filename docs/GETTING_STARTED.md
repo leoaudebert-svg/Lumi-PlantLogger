@@ -86,8 +86,8 @@ I (...) main: PlantLogger started.
 1. On your phone, tablet, or laptop, connect to the `PlantLogger` Wi-Fi network.
 2. A captive-portal "Sign in to network" prompt should appear automatically.
    Tap it, or open a browser and go to `http://192.168.4.1`.
-3. The dashboard shows live sensor values, logging controls, calibration
-   controls, and a table of completed log files.
+3. The dashboard shows live sensor values, named logging controls, calibration
+   controls, storage usage, and a table of completed log files.
 
 ## 6. Calibrate The Soil Sensor
 
@@ -110,30 +110,30 @@ Repeat calibration when swapping sensors or when readings drift.
 
 ## 7. Start Logging
 
-1. Set **Log interval** to the desired sampling period in seconds.
-2. Click **Start logging**. The display shows `Log: ON`.
-3. The device immediately records a first reading, then records at the selected
+1. Enter a unique **Log name** for the session.
+2. Set **Log interval** to the desired sampling period in seconds.
+3. Click **Start logging**. The display shows `Log: ON`.
+4. The device immediately records a first reading, then records at the selected
    interval.
-4. Click **Stop logging** when finished. The display shows `Log: OFF`.
-5. Download the latest CSV or a specific completed log from the log table.
+5. Click **Stop logging** when finished. The display shows `Log: OFF`.
+6. Open graphs for the completed log from the log table.
 
 Physical button shortcuts:
 
 | Action | Result |
 |---|---|
 | Short press | Trigger one immediate sensor read |
-| Long press | Toggle logging on or off |
+| Long press | No logging action; sessions must be named in the dashboard |
 
-## 8. Download And Clear Logs
+## 8. Review And Clear Logs
 
-- **Download latest** streams the most recently completed session as
-  `plantlogger.csv`.
-- The **Available logs** table lists up to 5 completed slots and downloads each
-  specific slot as `log_N.csv`.
+- The **Available logs** table lists up to 5 named completed sessions.
+- Each log has an **Open graphs** button for basic metric-vs-time charts.
+- The storage bar shows LittleFS used space, free space, and CSV log bytes.
 - **Clear logs** permanently deletes every log file and resets the rotation
   counter.
 
-Downloads and clearing are disabled while a logging session is active.
+Clearing is disabled while a logging session is active.
 
 Up to 5 log files are kept at once. When a sixth session starts, the oldest slot
 is overwritten automatically using round-robin rotation.
@@ -144,7 +144,7 @@ After the first successful flash, run a real 24-72 hour logging session:
 
 1. Put PlantLogger beside an actual plant.
 2. Use a 60-300 second interval for a long run, or 60 seconds for a dense test.
-3. Download the CSV at the end.
+3. Open the completed log graphs at the end.
 4. Check for timestamp gaps, unexpected zeros, calibration drift, and whether
    the dashboard remains reachable.
 
@@ -159,8 +159,8 @@ After the first successful flash, run a real 24-72 hour logging session:
 ## TODO - Next Session
 
 - Add browser-driven clock setting for wall-clock CSV timestamps.
-- Add `/api/status` fields for uptime, free flash, current slot, sample count,
-  and last-read age.
-- Add dashboard mini charts and stale-data warnings.
+- Add `/api/status` fields for uptime, current slot, sample count, and
+  last-read age.
+- Add stale-data warnings.
 - Validate logging intervals more strictly in both firmware and frontend.
 - Capture the results of the first 24-72 hour field trial in the docs.

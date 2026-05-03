@@ -3,8 +3,8 @@
 PlantLogger is now a working embedded plant-monitoring and CSV data logger for
 the M5Stack AtomS3R. It reads temperature, humidity, pressure, ambient light,
 and capacitive soil moisture, shows live readings on the built-in display,
-serves a captive-portal web dashboard, and stores downloadable CSV log files on
-LittleFS flash.
+serves a captive-portal web dashboard, and stores CSV log files on
+LittleFS flash for in-browser graph review.
 
 ## Current Working Features
 
@@ -17,10 +17,10 @@ LittleFS flash.
 - Wi-Fi Access Point named `PlantLogger` at `192.168.4.1`.
 - Captive portal redirects for common phone/laptop network checks.
 - Single-page embedded dashboard from `Frontend/`.
-- Start/stop logging from the dashboard or physical button.
+- Named start/stop logging from the dashboard.
 - Immediate read from the dashboard or physical button.
 - CSV logging to up to 5 rotating LittleFS files.
-- Latest-file download and per-slot log downloads.
+- Storage usage bar and per-log graph views.
 - Clear-all log and clear-calibration controls.
 
 ## First Thing To Do
@@ -31,8 +31,8 @@ Run a real field trial:
 2. Connect to the `PlantLogger` Wi-Fi network.
 3. Open `http://192.168.4.1`.
 4. Calibrate the soil sensor with dry and wet readings.
-5. Start a 24-72 hour logging session beside an actual plant.
-6. Download the CSV and inspect gaps, timestamps, calibration stability, and
+5. Start a named 24-72 hour logging session beside an actual plant.
+6. Open the log graphs and inspect gaps, timestamps, calibration stability, and
    file rotation behavior.
 
 This project has crossed the MVP line. The next work should be driven by what
@@ -69,7 +69,7 @@ pio device monitor
 
 - Run the first 24-72 hour field trial beside a real plant.
 - Add browser-driven clock setting for wall-clock CSV timestamps.
-- Expand status metadata with uptime, free flash, current slot, sample count,
-  and last-read age.
-- Add dashboard mini charts and clearer stale-data warnings.
+- Expand status metadata with uptime, current slot, sample count, and last-read
+  age.
+- Add clearer stale-data warnings.
 - Tighten interval validation and log any field-trial issues in the docs.

@@ -30,6 +30,7 @@ static uint16_t          _last_lux        = 0;
 static soil::SoilReading _last_soil       = {};
 static bool              _logging         = false;
 static uint32_t          _log_interval_ms = 60000;
+static char              _log_name[logger::LOG_NAME_LEN] = "";
 static std::atomic<bool> _read_req {false};
 
 // Pending calibration points, initialised from NVS in begin().
@@ -66,6 +67,53 @@ static const char* basename_for_path(const char* path) {
     return path[0] == '/' ? path + 1 : path;
 }
 
+static void append_json_string(String& body, const char* value) {
+    body += '"';
+    if (value != nullptr) {
+        for (const char* p = value; *p != '\0'; ++p) {
+            char c = *p;
+            if (c == '"' || c == '\\') {
+                body += '\\';
+                body += c;
+            } else if (c == '\n') {
+                body += "\\n";
+            } else if (c == '\r') {
+                body += "\\r";
+            } else if (static_cast<unsigned char>(c) >= 0x20) {
+                body += c;
+            }
+        }
+    }
+    body += '"';
+}
+
+static bool is_valid_log_name_char(char c) {
+    return isalnum(static_cast<unsigned char>(c)) ||
+           c == ' ' ||
+           c == '_' ||
+           c == '-' ||
+           c == '.';
+}
+
+static bool validate_log_name(String& name, String& error) {
+    name.trim();
+    if (name.length() == 0) {
+        error = "Log name is required";
+        return false;
+    }
+    if (name.length() >= logger::LOG_NAME_LEN) {
+        error = "Log name must be 32 characters or less";
+        return false;
+    }
+    for (size_t i = 0; i < name.length(); ++i) {
+        if (!is_valid_log_name_char(name[i])) {
+            error = "Log name can use letters, numbers, spaces, _, -, and .";
+            return false;
+        }
+    }
+    return true;
+}
+
 // ---------------------------------------------------------------------------
 // HTTP handlers (file-scope; registered in begin())
 // ---------------------------------------------------------------------------
@@ -79,7 +127,7 @@ static void handle_status() {
     snprintf(buf, JSON_STATUS_BUF_SIZE,
         "{\"temp_c\":%.1f,\"rh_pct\":%.1f,\"pressure_hpa\":%.1f,"
         "\"lux\":%u,\"soil_raw\":%u,\"soil_pct\":%.0f,"
-        "\"soil_calibrated\":%s,\"logging\":%s,\"download_available\":%s,"
+        "\"soil_calibrated\":%s,\"logging\":%s,"
         "\"cal_dry\":%u,\"cal_wet\":%u}",
         _last_env.temp_c,
         _last_env.rh_pct,
@@ -89,7 +137,6 @@ static void handle_status() {
         _last_soil.pct,
         _last_soil.calibrated ? "true" : "false",
         _logging ? "true" : "false",
-        (!_logging && logger::get_latest_filename() != nullptr) ? "true" : "false",
         _pending_dry_raw,
         _pending_wet_raw);
     _server.send(200, "application/json", buf);
@@ -98,9 +145,11 @@ static void handle_status() {
 static void handle_logs() {
     logger::LogFileInfo files[logger::MAX_LOG_FILES];
     uint8_t count = logger::list_files(files, logger::MAX_LOG_FILES);
+    logger::StorageInfo storage;
+    logger::get_storage_info(storage);
 
     String body;
-    body.reserve(48 + static_cast<size_t>(count) * 112);
+    body.reserve(160 + static_cast<size_t>(count) * 160);
     body = "{\"logs\":[";
     for (uint8_t i = 0; i < count; ++i) {
         if (i > 0) {
@@ -108,17 +157,27 @@ static void handle_logs() {
         }
         body += "{\"slot\":";
         body += String(files[i].slot);
-        body += ",\"filename\":\"";
-        body += basename_for_path(files[i].path);
-        body += "\",\"path\":\"";
-        body += files[i].path;
-        body += "\",\"size_bytes\":";
+        body += ",\"name\":";
+        append_json_string(body, files[i].name);
+        body += ",\"filename\":";
+        append_json_string(body, basename_for_path(files[i].path));
+        body += ",\"path\":";
+        append_json_string(body, files[i].path);
+        body += ",\"size_bytes\":";
         body += String(static_cast<unsigned long>(files[i].size_bytes));
         body += ",\"is_latest\":";
         body += files[i].is_latest ? "true" : "false";
         body += '}';
     }
-    body += "]}";
+    body += "],\"storage\":{\"total_bytes\":";
+    body += String(static_cast<unsigned long>(storage.total_bytes));
+    body += ",\"used_bytes\":";
+    body += String(static_cast<unsigned long>(storage.used_bytes));
+    body += ",\"free_bytes\":";
+    body += String(static_cast<unsigned long>(storage.free_bytes));
+    body += ",\"log_bytes\":";
+    body += String(static_cast<unsigned long>(storage.log_bytes));
+    body += "}}";
     _server.send(200, "application/json", body);
 }
 
@@ -132,6 +191,18 @@ static void handle_start() {
         _server.send(409, "text/plain", "Already logging - stop the current session first");
         return;
     }
+
+    String name = _server.arg("name");
+    String error;
+    if (!validate_log_name(name, error)) {
+        _server.send(400, "text/plain", error);
+        return;
+    }
+    if (logger::name_exists(name.c_str())) {
+        _server.send(409, "text/plain", "A log with that name already exists");
+        return;
+    }
+
     String interval_str = _server.arg("interval");
     if (interval_str.length() > 0) {
         long interval_secs = interval_str.toInt();
@@ -139,8 +210,9 @@ static void handle_start() {
             _log_interval_ms = static_cast<uint32_t>(interval_secs) * 1000UL;
         }
     }
+    snprintf(_log_name, sizeof(_log_name), "%s", name.c_str());
     _logging = true;
-    ESP_LOGI(TAG, "Logging started via web (interval: %u ms)", _log_interval_ms);
+    ESP_LOGI(TAG, "Logging started via web (name: %s, interval: %u ms)", _log_name, _log_interval_ms);
     _server.send(200, "text/plain", "OK");
 }
 
@@ -150,25 +222,18 @@ static void handle_stop() {
     _server.send(200, "text/plain", "OK");
 }
 
-static void handle_download_csv() {
-    if (_logging) {
-        _server.send(409, "text/plain", "Stop logging before downloading");
+static void handle_graphs() {
+    _server.send_P(200, "text/html", HTML_PAGE);
+}
+
+static void handle_log_data() {
+    uint8_t slot = 0;
+    if (!parse_slot_arg(slot)) {
+        _server.send(400, "text/plain", "Invalid log slot");
         return;
     }
 
-    const char* path = nullptr;
-    bool slot_requested = _server.hasArg("slot");
-    if (slot_requested) {
-        uint8_t slot = 0;
-        if (!parse_slot_arg(slot)) {
-            _server.send(400, "text/plain", "Invalid log slot");
-            return;
-        }
-        path = logger::get_filename_for_slot(slot);
-    } else {
-        path = logger::get_latest_filename();
-    }
-
+    const char* path = logger::get_filename_for_slot(slot);
     if (path == nullptr) {
         _server.send(404, "text/plain", "No log file available");
         return;
@@ -180,11 +245,7 @@ static void handle_download_csv() {
         return;
     }
 
-    char disposition[72];
-    snprintf(disposition, sizeof(disposition),
-             "attachment; filename=\"%s\"",
-             slot_requested ? basename_for_path(path) : "plantlogger.csv");
-    _server.sendHeader("Content-Disposition", disposition);
+    _server.sendHeader("Cache-Control", "no-store");
     _server.streamFile(f, "text/csv");
     f.close();
 }
@@ -297,12 +358,13 @@ void begin() {
 
     // Main routes
     _server.on("/",                  HTTP_GET,  handle_root);
+    _server.on("/graphs",            HTTP_GET,  handle_graphs);
     _server.on("/api/status",        HTTP_GET,  handle_status);
     _server.on("/api/logs",          HTTP_GET,  handle_logs);
+    _server.on("/api/log-data",      HTTP_GET,  handle_log_data);
     _server.on("/read-now",          HTTP_POST, handle_read_now);
     _server.on("/start",             HTTP_POST, handle_start);
     _server.on("/stop",              HTTP_POST, handle_stop);
-    _server.on("/download.csv",      HTTP_GET,  handle_download_csv);
     _server.on("/clear",             HTTP_POST, handle_clear);
     _server.on("/calibrate-dry",     HTTP_POST, handle_calibrate_dry);
     _server.on("/calibrate-wet",     HTTP_POST, handle_calibrate_wet);
@@ -348,6 +410,10 @@ bool consume_read_request() {
 
 uint32_t get_log_interval_ms() {
     return _log_interval_ms;
+}
+
+const char* get_log_name() {
+    return _log_name;
 }
 
 } // namespace webserver
