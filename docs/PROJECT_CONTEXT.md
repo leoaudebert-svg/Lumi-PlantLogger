@@ -1,428 +1,328 @@
-# PlantLogger — Project Context for Coding Agents
-Version: 1.0  
-Status: Source-of-truth document for AI coding agents
+# PlantLogger Project Context For Coding Agents
 
----
+Version: 2.0  
+Status: Source-of-truth document for future coding sessions
 
-# 1. Project Overview
+## 1. Project Overview
 
-PlantLogger is a modular embedded monitoring system for plant health and environmental logging, built around the M5Stack AtomS3R.
+PlantLogger is a modular embedded monitoring and data-logging system for plant
+health and indoor growing conditions. It runs on an M5Stack AtomS3R with an
+embedded web dashboard and local CSV storage.
 
 Primary objective:
 
-**Reliable sensing and data logging first, intelligence second.**
+**Reliable sensing and clean logs first; analytics second.**
 
-The system monitors:
+Current measured values:
 
 - Air temperature
 - Relative humidity
-- Soil moisture
-- Ambient light (lux)
-- Atmospheric pressure (optional)
+- Atmospheric pressure
+- Ambient light in lux
+- Soil moisture raw ADC
+- Soil moisture calibrated percentage
 
 Future derived metrics:
+
 - Vapor Pressure Deficit (VPD)
 - Daily Light Integral (DLI)
 - Watering event detection
 - Soil drying trends
-- Plant stress heuristics
+- Plant stress hints
 
 Project priorities:
 
-1. Reliability  
-2. Clean data  
-3. Modularity  
-4. Low power  
+1. Reliability
+2. Clean data
+3. Simple local operation
+4. Modularity
 5. Future analytics support
 
----
+## 2. Current Working Product
 
-# 2. Hardware Platform
+The MVP is working.
 
-## Controller
+Implemented:
 
-## M5Stack AtomS3R
+- PlatformIO firmware for M5Stack AtomS3R.
+- On-device 128 x 128 display.
+- ENV III driver for SHT30 and QMP6988.
+- DLight driver for BH1750.
+- SEN0193 capacitive soil driver with median filtering.
+- Dry/wet calibration persisted to NVS.
+- Wi-Fi AP named `PlantLogger`.
+- Captive-portal DNS and redirects.
+- Embedded single-page dashboard from `Frontend/`.
+- `/api/status` JSON endpoint.
+- `/api/logs` metadata endpoint.
+- Start/stop/read-now HTTP controls.
+- Latest and per-slot CSV downloads.
+- 5-file LittleFS round-robin log rotation.
+- Physical button shortcuts:
+  - short press: read now
+  - long press: toggle logging
 
-MCU:
-ESP32-S3
+## 3. Hardware Platform
 
-Specs:
-- Dual core 240 MHz
-- 8MB Flash
-- 8MB PSRAM
-- WiFi
-- 128x128 integrated display
-- Built-in sensors may be considered later if they support the plant logging roadmap
+Controller: M5Stack AtomS3R
+
+- ESP32-S3
+- 8 MB flash
+- 8 MB PSRAM
+- Wi-Fi
+- 128 x 128 integrated display
+- Built-in front button
+- HY2.0-4P / Grove I2C port
 
 Framework:
+
 - PlatformIO
 - Arduino framework
-- C++17
+- C++17-compatible embedded style
 
----
+## 4. Sensor Stack
 
-# 3. Sensor Stack
+### Ambient Light
 
-## Ambient Light
-Sensor:
-BH1750 (M5Stack DLight)
+Sensor: M5Stack DLight / BH1750
 
-Interface:
-I2C
+- Interface: I2C
+- Address: `0x23`
+- Current output: raw lux
+- Future use: DLI and light trend analysis
 
-Address:
-0x23
+### Environment
 
-Range:
-1–65535 lux
+Sensor: M5Stack ENV III
 
-Sampling:
-30 sec
+SHT30:
 
-Store:
-1-minute aggregated values
-
-Use:
-- Light trends
-- DLI (future)
-
----
-
-## Environmental Sensor
-M5Stack ENV III
-
-Contains:
-
-### SHT30
-
-Address:
-0x44
-
-Measures:
+- Address: `0x44`
 - Temperature
-- Humidity
+- Relative humidity
+- Critical for `env::is_ok()`
 
-Accuracy:
-- ±0.2°C
-- ±2% RH
+QMP6988:
 
-Sampling:
-30–60 sec
+- Address: `0x70`
+- Atmospheric pressure
+- Optional; absence should not stop the logger
 
----
+### Soil Moisture
 
-### QMP6988
+Sensor: DFRobot SEN0193 capacitive moisture sensor
 
-Address:
-0x70
+- Interface: analog ADC, not I2C
+- Default ADC pin: GPIO 6
+- Valid ADC1 pins: GPIO 1-10
+- I2C uses GPIO 1 and GPIO 2, so practical soil choices are GPIO 3-10
+- Higher ADC value means drier soil
+- 7-sample median read
+- Dry/wet calibration required before trusting percentage
 
-Measures:
-- Pressure
+## 5. Firmware Architecture
 
-Sampling:
-1–5 min
+Current layout:
 
-Optional for MVP.
-
----
-
-## Soil Moisture
-
-Sensor:
-DFRobot SEN0193 Capacitive Moisture Sensor
-
-Interface:
-Analog ADC
-
-Important:
-NOT I2C.
-
-Requirements:
-- ADC read
-- Dry/wet calibration
-- Median burst filtering
-
-Sampling:
-60–300 sec
-
-Acquisition:
-7 samples preferred
-
-Store:
-- Raw ADC
-- Calibrated %
-- Calibration references
-
-Never trust percentage without calibration.
-
----
-
-# 4. Bus Architecture
-
-## Shared I2C Bus
-
-Devices:
-- BH1750 → 0x23
-- SHT30 → 0x44
-- QMP6988 → 0x70
-
-Bus speed:
-400kHz preferred.
-
-Check possible address conflicts.
-
----
-
-## ADC Path
-
-Dedicated analog input for soil sensor.
-
-Filtering:
-- Oversampling
-- Median filter
-- Optional moving average
-
----
-
-# 5. Firmware Architecture
-
-PlantLogger/
-
+```text
 include/
-- button.h
+  button.h
+  dlight.h
+  env_driver.h
+  logger.h
+  plant_webserver.h
+  soil.h
 
 src/
+  main.cpp
+  logger.cpp
+  webserver.cpp
+  drivers/
+    button.cpp
+    dlight.cpp
+    env_driver.cpp
+    soil.cpp
 
-drivers/
-- button.cpp
-- dlight_driver.cpp
-- env_driver.cpp
-- soil_driver.cpp
+Frontend/
+  index.html
+  style.css
+  app.js
 
-services/
-- scheduler.cpp
-- logger.cpp
-- calibration.cpp
-
-analytics/
-- vpd.cpp
-- watering_detector.cpp
-- trend_analysis.cpp
-
-storage/
-- flash_store.cpp
-- record_format.cpp
-- mqtt_publish.cpp
-
-ui/
-- display_manager.cpp
-- dashboard_screen.cpp
-
-main.cpp
-
----
+scripts/
+  embed_frontend.py
+```
 
 Architecture rule:
 
-Drivers return raw measurements only.
+Drivers should stay focused on hardware access and raw readings. Higher layers
+handle display, logging, web state, calibration workflow, derived calculations,
+and future analytics.
 
-Higher layers handle:
-- Filtering
-- Derived calculations
-- Event logic
+## 6. Runtime Flow
 
-Strict separation.
+Setup:
 
----
+1. Start serial and M5.
+2. Start the webserver AP.
+3. Initialise environment, light, soil, and logger modules.
+4. Take an initial sensor reading.
+5. Display and dashboard become ready.
 
-# 6. Sampling Scheduler
+Loop:
 
-Master scheduler:
-60 second loop.
-
-Cycle:
-
-Every cycle:
-- Soil burst read
-- Lux read
-- Temp/RH read
-
-Every 5 cycles:
-- Pressure read
-
-Sequence:
-
-t = 60 s
-
-1 Soil burst median  
-2 Light read  
-3 Temp/RH read  
-4 Optional pressure  
-5 Package record  
-6 Log record
-
-Rule:
-Never use delay()
-
-Use millis()-based scheduling only.
-
----
-
-# 7. Data Record Format
-
-Each record stores:
-
-timestamp_utc
-
-Measurements:
-- temp_c
-- rh_pct
-- pressure_pa
-- lux
-- soil_raw
-- soil_pct
-
-Derived:
-- vpd_kpa
-- watering_event
-
-Metadata:
-- firmware_version
-- calibration_id
-- pot_id
-- sensor_ids
-
-Example:
-
-{
- "ts":"2026-04-26T18:30:00Z",
- "temp_c":24.1,
- "rh":57.2,
- "lux":18340,
- "soil_raw":2148,
- "soil_pct":42.7,
- "vpd":1.21,
- "pot_id":"monstera_01"
-}
+1. Update M5 and button state.
+2. Service DNS and HTTP clients.
+3. Detect logging transitions and open/close CSV sessions.
+4. Consume read-now requests or button clicks.
+5. Read sensors at the active logging interval.
+6. Append rows while a logger session is open.
+7. Toggle logging on long button press.
 
 Rule:
 
-Always store:
-- raw values
-- calibrated values
-- derived values
+Avoid blocking logic. The existing code uses one short `vTaskDelay(1)` yield at
+the end of `loop()`.
 
-Never derived only.
+## 7. Data Format
 
----
+Current CSV header:
 
-# 8. Development Roadmap
+```csv
+timestamp_ms,temp_c,rh_pct,pressure_hpa,lux,soil_raw,soil_pct
+```
 
-## Phase 1 MVP
-- Stable sensor acquisition
-- Local logging
-- Calibration
-- Serial debugging
+Important:
 
-## Phase 2
+- `timestamp_ms` is `millis()` since boot, not wall-clock time.
+- Soil percentage is only meaningful when calibration is valid.
+- Always preserve raw values when adding derived values.
+- Prefer adding new columns over replacing existing ones.
+
+## 8. Development Roadmap
+
+Completed MVP:
+
+- Stable local sensor acquisition
 - Display dashboard
-- Trend visualization
-- Basic alerts
+- Captive-portal web dashboard
+- Soil calibration
+- CSV logging
+- Log rotation and downloads
+- HTTP API for automation
 
-## Phase 3
+Next phase:
+
+- Field-trial hardening
+- Browser-driven clock setting
+- Richer status metadata
+- Dashboard trend charts
+- Stale-data and sensor-failure warnings
+- Stronger validation of user inputs
+
+Later:
+
 - VPD
 - DLI
-- Watering detection
+- Watering event detection
+- Multi-plant metadata
+- Optional MQTT or network sync
+- Lower-power logging modes
 
-## Phase 4
-- WiFi sync
-- MQTT
-- Multi-plant support
-
----
-
-# 9. Coding Rules
+## 9. Coding Rules
 
 Mandatory:
 
-- Simplest implementation first
-- Use library support before custom code
-- Keep hardware constants centralized once sensor pins are chosen
-- Never use delay()
-- Use ESP_LOGI/W/E/D logging macros
-- Avoid over-engineering
-- Build incrementally
-- Ask before adding abstractions
+- Prefer small, incremental changes.
+- Use existing modules and patterns before adding abstractions.
+- Do not rewrite working drivers without a specific reason.
+- Keep HTTP responses small and ESP32-friendly.
+- Use `ESP_LOGI`, `ESP_LOGW`, `ESP_LOGE`, or `ESP_LOGD` for firmware logs.
+- Avoid new dependencies unless they clearly pay for themselves.
+- Preserve the embedded dashboard build flow through `scripts/embed_frontend.py`.
+- Keep CSV backward compatibility where practical.
 
-If uncertain:
-Check existing library support first.
+If uncertain, first inspect the existing module and choose the least surprising
+extension.
 
----
+## 10. Approved Libraries
 
-# 10. Approved Libraries
-
-Allowed:
+Currently used:
 
 - M5Unified
 - M5GFX
 - M5Unit-ENV
 - M5_DLight
 - Wire
-- ArduinoJson (optional)
 - Preferences
 - LittleFS
+- WiFi
+- WebServer
+- DNSServer
 
-Avoid new dependencies unless justified.
+ArduinoJson is acceptable if JSON output grows enough that manual string
+assembly becomes risky, but it is not required right now.
 
----
+## 11. Scope Boundaries
 
-# 11. Scope Boundaries
+Keep work focused on plant monitoring, environmental sensing, calibration,
+local logging, local dashboard controls, and connectivity features that directly
+support PlantLogger.
 
-Keep code generation focused on plant monitoring, environmental sensing,
-calibration, logging, display, and connectivity features that directly support
-PlantLogger.
+Avoid ML or cloud features until the local data pipeline has survived real
+multi-day field trials.
 
----
+## 12. Success Criteria
 
-# 12. Optional Future Sensors
+Successful next milestone:
 
-Possible additions:
-- Soil temperature
-- CO2
-- IR leaf temperature
-- Reservoir level
-- Pot weight load cell
+- Runs continuously for 24-72 hours.
+- Logs at the selected interval with no unexpected gaps.
+- Produces downloadable CSVs from all completed slots.
+- Calibration survives power cycles.
+- Dashboard remains reachable during the run.
+- Any sensor failure is visible rather than silent.
 
-Architecture should stay extensible.
+Longer-term success:
 
----
+- Survives weeks unattended.
+- Produces clean data suitable for analysis.
+- Adds derived metrics without losing raw measurements.
 
-# 13. Success Criteria
+## 13. TODO - Next Session
 
-Successful MVP:
+Field trial:
 
-- Runs continuously
-- Logs reliably
-- Produces clean data
-- Survives weeks unattended
-- Supports later AI analytics
+- Run a 24-72 hour logging session beside a real plant.
+- Use a 60-300 second interval for realistic wear and data density.
+- Download the CSV and inspect timestamp gaps, unexpected zeros, calibration
+  drift, dashboard reachability, and file rotation.
+- Record observations in `docs/GETTING_STARTED.md` or a new field-trial note.
 
-Reliability over sophistication.
+Clock and timestamps:
 
----
+- Add a browser-to-device clock endpoint, for example `POST /api/time`.
+- Store both elapsed `timestamp_ms` and wall-clock time in future CSV rows.
+- Decide whether wall-clock output should be UTC ISO 8601 or local time with
+  offset.
 
-# 14. Agent Guardrails
+Status and reliability:
 
-Agents must:
+- Expand `/api/status` with uptime, free flash, current log slot, sample count,
+  and last-read age.
+- Add API/UI validation for interval bounds.
+- Add visible warnings for stale readings and sensor failures.
+- Add low-storage or filesystem-unavailable warnings.
 
-- Never rewrite working drivers unnecessarily
-- Prefer extending existing code over replacing it
-- Avoid FreeRTOS multitasking unless justified
-- Avoid premature optimization
-- Avoid ML features before stable data pipeline exists
+Dashboard:
 
-Default philosophy:
+- Add small in-browser trend charts for soil, lux, temperature, and humidity.
+- Show "last read" age instead of only "Last sync".
+- Improve log table feedback when logging is active and downloads are blocked.
 
-Simple > Clever  
-Robust > Complex  
-Maintainable > Fancy
+Data and analytics:
+
+- Add session metadata such as session start time, sample count, and firmware
+  version.
+- Add VPD once temperature and humidity logs are proven stable.
+- Add DLI once light sampling behavior is validated over a full day.
+- Add watering-event detection only after several real soil-drying traces exist.

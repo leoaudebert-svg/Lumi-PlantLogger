@@ -136,3 +136,14 @@ hub/splitter).
 The exact dry/wet ADC values vary by unit and supply voltage.  Always perform
 the two-point calibration procedure described in
 [GETTING_STARTED.md](GETTING_STARTED.md#6-calibrate-the-soil-sensor).
+
+---
+
+## TODO - Next Session
+
+- During the 24-72 hour field trial, note any wiring instability, sensor
+  disconnects, or noisy soil ADC behavior.
+- Confirm the chosen soil ADC pin remains physically convenient once the device
+  is installed near a real plant.
+- If soil readings are noisy in-place, consider documenting cable length,
+  grounding, and whether a moving average is needed on top of the median read.
