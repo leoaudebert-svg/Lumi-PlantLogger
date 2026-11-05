@@ -158,7 +158,23 @@ pio run
 
 ## License
 
+<<<<<<< Updated upstream
 This repository does not currently include a license file. Publishing source
 without a license does **not** grant others permission to reuse, modify, or
 distribute it. Choose and add a license before accepting external contributions
 or inviting reuse.
+=======
+<<<<<<< Updated upstream
+See repository root for license information.
+=======
+PlantLogger is licensed under the **GNU General Public License v3.0 only**
+(GPL-3.0-only).
+
+You may use, modify, and distribute this project. If you distribute a modified
+version—such as firmware in a device—you must provide the corresponding source
+under GPLv3 as well. Private modifications that are never distributed do not
+have to be published.
+
+See [LICENSE](LICENSE) for the complete terms.
+>>>>>>> Stashed changes
+>>>>>>> Stashed changes
