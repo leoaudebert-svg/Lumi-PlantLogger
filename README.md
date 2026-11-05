@@ -45,7 +45,7 @@ details.
 Clone the repository:
 
 ```sh
-git clone https://github.com/leoaudebert-svg/PlantLogger.git
+git clone <your-repository-url>
 cd PlantLogger
 ```
 
